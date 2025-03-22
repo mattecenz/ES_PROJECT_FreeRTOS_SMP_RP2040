@@ -23,7 +23,7 @@ $ git submodule update --init
 For ease of developement from now on you may want to export the environment variable `PICO_SDK_PATH` (or else you need to add it manually when compiling with `-DPICO_SDK_PATH=...`):
 
 ```
-$ export PICO_SDK_PATH=../../pico-sdk
+$ export PICO_SDK_PATH=<path>/pico-sdk
 ```
 
 Step 2: **installing the toolchain**
