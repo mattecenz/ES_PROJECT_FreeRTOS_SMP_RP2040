@@ -47,6 +47,8 @@ Picotool is a useful program which can help us with flashing the code directly o
 
 We can simply clone the [official repository](https://github.com/raspberrypi/picotool) and then compile it:
 
+**NB:** When using the latest version of CMake 4.0.0 (and onwards), the support of versions <3.5 has been removed. So we need to update `pico-sdk/lib/mbedtls/CMakeLists.txt:23` and put the minimum version to 3.5. This is a problem of the open source project and it cannot be avoided. (At the moment I have opened an [Issue on Github](https://github.com/Mbed-TLS/mbedtls/issues/10123),let's see what they answer with).
+
 ```
 $ git clone https://github.com/raspberrypi/picotool.git
 $ cd picotool
