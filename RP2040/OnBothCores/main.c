@@ -248,7 +248,7 @@ int main(void) {
 #else
     prvNonRTOSWorker();
 #endif
-    test_setup(void);
+    test_setup();
 }
 /*-----------------------------------------------------------*/
 
@@ -601,7 +601,7 @@ static void vMasterTask(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-void test_setup(void){ 
+void test_setup(){ 
     vTaskSuspendAll(); 
     xTaskCreate(vMasterTask, "MaterTask", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL);
     xTaskResumeAll();
