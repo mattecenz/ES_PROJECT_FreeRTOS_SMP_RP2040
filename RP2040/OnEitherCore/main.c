@@ -4,17 +4,20 @@
 #include "queue.h"    /* RTOS queue related API prototypes. */
 #include "timers.h"   /* Software timer related API prototypes. */
 #include "semphr.h"   /* Semaphore related API prototypes. */
-#include <stdio.h>
+#include "stdio.h"
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "stdlib.h"
 
-#ifndef mainRUN_FREE_RTOS_ON_CORE
-#define mainRUN_FREE_RTOS_ON_CORE 0
-#endif
+
+#define mainRUN_FREE_RTOS_ON_CORE 0 //free RTOS pinned to core 0
+
+#define RAND_THRESHOLD 0.5 //threshold to simulate error rate
 
 /* Priorities at which the tasks are created.  The event semaphore task is
 given the maximum priority of ( configMAX_PRIORITIES - 1 ) to ensure it runs as
 soon as the semaphore is given. */
+#define mainOPERATIONS_PRIORITY             ( tskIDLE_PRIORITY + 4 )
 #define mainSDK_MUTEX_USE_TASK_PRIORITY     ( tskIDLE_PRIORITY + 3 )
 #define mainSDK_SEMAPHORE_USE_TASK_PRIORITY ( tskIDLE_PRIORITY + 2 )
 #define mainQUEUE_RECEIVE_TASK_PRIORITY     ( tskIDLE_PRIORITY + 2 )
@@ -32,42 +35,36 @@ converted to ticks using the pdMS_TO_TICKS() macro. */
 /* The number of items the queue can hold.  This is 1 as the receive task
 has a higher priority than the send task, so will remove items as they are added,
 meaning the send task should always find the queue empty. */
-#define mainQUEUE_LENGTH                    ( 1 )
+#define mainQUEUE_LENGTH                    ( 10 )
 
-/*-----------------------------------------------------------*/
+/*-----------------------------------------------------------*/						
+
+typedef struct dataToSend {
+    float params[2];
+    char operation;
+}data_t;
 
 /*
- * Implement this function for any hardware specific clock configuration
- * that was not already performed before main() was called.
+ * USED
  */
 static void prvSetupHardware( void );
-
+static float readFloatFromSerial();
+static char readCharFromSerial();
+static void operativeTask(void *pvParameters);
+static void init();
+static void launchOPTasks(void*parameters);
+static float sum2nums(float a, float b);
+static float sub2nums(float a, float b);
+static float mul2nums(float a, float b);
+static float div2nums(float a, float b);
+static void handleRequests(void *pvParameters);
+static void flushSerialInput();
 /*
- * The queue send and receive tasks as described in the comments at the top of
- * this file.
- */
-static void prvQueueReceiveTask( void *pvParameters );
-static void prvQueueSendTask( void *pvParameters );
-
-/*
- * The callback function assigned to the example software timer as described at
- * the top of this file.
+ * NOT USED
  */
 static void vExampleTimerCallback( TimerHandle_t xTimer );
-
-/*
- * The event semaphore task as described at the top of this file.
- */
 static void prvEventSemaphoreTask( void *pvParameters );
-
-/**
- * A task that uses an SDK mutex
- */
 static void prvSDKMutexUseTask( void *pvParameters );
-
-/**
- * A task that uses an SDK semaphore
- */
 static void prvSDKSemaphoreUseTask( void *pvParameters );
 
 /*-----------------------------------------------------------*/
@@ -95,162 +92,245 @@ static volatile uint32_t ulCountOfSDKSemaphoreAcquires = 0;
 #include "pico/mutex.h"
 #include "pico/sem.h"
 
-#if ( configNUMBER_OF_CORES > 1 )
-#error Require only one core configured for FreeRTOS
-#endif
 
 auto_init_mutex(xSDKMutex);
 static semaphore_t xSDKSemaphore;
 
-static void prvNonRTOSWorker() {
-    printf("Core %d: Doing regular SDK stuff\n", get_core_num());
-    uint32_t counter = 0;
-    while (true) {
-        mutex_enter_blocking(&xSDKMutex);
-        printf("Core %d: Acquire SDK mutex\n", get_core_num());
-        absolute_time_t end_time = make_timeout_time_ms(750);
-        while (!time_reached(end_time)) {
-            counter++;
-            printf("Core %d: Busy work with mutex %ld\n", get_core_num(), counter);
-            busy_wait_us(137384);
-        }
-        printf("Core %d: Release SDK mutex\n", get_core_num());
-        mutex_exit(&xSDKMutex);
-        printf("Core %d: Starting SDK sleep\n", get_core_num());
-        sleep_ms(1200);
-        printf("Core %d: Finish SDK sleep; release SDK semaphore\n", get_core_num());
-        sem_release(&xSDKSemaphore);
-    }
+//static int params0[2]; //dummy values to test execution on core 0
+//static int params1[2]; //dummy values to test execution on core 1
+
+
+static void init() {
+    
+    //seems like they are already saved into task structure the value will be updated and not lost, even if pointer gets freed 
+    TaskHandle_t xHandleRequests = NULL;
+    xTaskCreate(handleRequests,
+                "HR0",
+                configMINIMAL_STACK_SIZE,
+                NULL,
+                mainQUEUE_RECEIVE_TASK_PRIORITY,
+                &xHandleRequests);
+    vTaskCoreAffinitySet(xHandleRequests, (1 << 0)); // Set task to run on core 0
 }
 
-static void prvLaunchRTOS() {
-    printf("Core %d: Launching FreeRTOS scheduler\n", get_core_num());
-    /* Start the tasks and timer running. */
-    vTaskStartScheduler();
-    /* should never reach here */
-    panic_unsupported();
-}
 
-static void prvCore1Entry() {
-#if ( mainRUN_FREE_RTOS_ON_CORE == 1 )
-    prvLaunchRTOS();
-#else
-    prvNonRTOSWorker();
-#endif
-}
 
 int main(void) {
-    TimerHandle_t xExampleSoftwareTimer = NULL;
-
-    /* Configure the system ready to run the demo.  The clock configuration
-    can be done here if it was not done before main() was called. */
+    //TEST DESCRIPTION: this test will create two tasks on core 0 and core 1, each task will sum two numbers and send the result to a queue. The queue will be read by a task on core 0.
+    //TEST is performed with SMP and the queue address is static, therefore is accessible by both cores
     prvSetupHardware();
+    sleep_ms(5000); //wait 5 sec for serial output to be ready 
+    printf("Core %d: Launching FreeRTOS scheduler\n", get_core_num());
 
     /* Create the queue used by the queue send and queue receive tasks. */
     xQueue = xQueueCreate(     /* The number of items the queue can hold. */
             mainQUEUE_LENGTH,
     /* The size of each item the queue holds. */
-            sizeof(uint32_t));
+            sizeof(float));
 
 
-    /* Create the semaphore used by the FreeRTOS tick hook function and the
-    event semaphore task.  NOTE: A semaphore is used for example purposes,
-    using a direct to task notification will be faster! */
-    xEventSemaphore = xSemaphoreCreateBinary();
+    init();
+    vTaskStartScheduler();
+    
+    printf("Core %d: ended\n", get_core_num());
 
-
-    /* Create the queue receive task as described in the comments at the top
-    of this file. */
-    xTaskCreate(     /* The function that implements the task. */
-            prvQueueReceiveTask,
-            /* Text name for the task, just to help debugging. */
-            "Rx",
-            /* The size (in words) of the stack that should be created
-            for the task. */
-            configMINIMAL_STACK_SIZE,
-            /* A parameter that can be passed into the task.  Not used
-            in this simple demo. */
-            NULL,
-            /* The priority to assign to the task.  tskIDLE_PRIORITY
-            (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1
-            is the highest priority. */
-            mainQUEUE_RECEIVE_TASK_PRIORITY,
-            /* Used to obtain a handle to the created task.  Not used in
-            this simple demo, so set to NULL. */
-            NULL);
-
-
-    /* Create the queue send task in exactly the same way.  Again, this is
-    described in the comments at the top of the file. */
-    xTaskCreate(prvQueueSendTask,
-                "TX",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                mainQUEUE_SEND_TASK_PRIORITY,
-                NULL);
-
-
-    /* Create the task that is synchronised with an interrupt using the
-    xEventSemaphore semaphore. */
-    xTaskCreate(prvEventSemaphoreTask,
-                "Sem",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                mainEVENT_SEMAPHORE_TASK_PRIORITY,
-                NULL);
-
-
-    /* Create the task that uses SDK mutexes */
-    xTaskCreate(prvSDKMutexUseTask,
-                "SDK Mutex Use",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                mainSDK_MUTEX_USE_TASK_PRIORITY,
-                NULL);
-
-    sem_init(&xSDKSemaphore, 0, 1);
-
-    /* Create the task that uses SDK mutexes */
-    xTaskCreate(prvSDKSemaphoreUseTask,
-                "SDK Seamphore Use",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                mainSDK_SEMAPHORE_USE_TASK_PRIORITY,
-                NULL);
-
-    /* Create the software timer as described in the comments at the top of
-    this file. */
-    xExampleSoftwareTimer = xTimerCreate(     /* A text name, purely to help
-                                            debugging. */
-            (const char *) "LEDTimer",
-            /* The timer period, in this case
-            1000ms (1s). */
-            mainSOFTWARE_TIMER_PERIOD_MS,
-            /* This is a periodic timer, so
-            xAutoReload is set to pdTRUE. */
-            pdTRUE,
-            /* The ID is not used, so can be set
-            to anything. */
-            (void *) 0,
-            /* The callback function that switches
-            the LED off. */
-            vExampleTimerCallback
-    );
-
-    /* Start the created timer.  A block time of zero is used as the timer
-    command queue cannot possibly be full here (this is the first timer to
-    be created, and it is not yet running). */
-    xTimerStart(xExampleSoftwareTimer, 0);
-
-    multicore_launch_core1(prvCore1Entry);
-#if ( mainRUN_FREE_RTOS_ON_CORE == 0 )
-    prvLaunchRTOS();
-#else
-    prvNonRTOSWorker();
-#endif
 }
-/*-----------------------------------------------------------*/
 
+/*-----------------------------------------------------------*/
+static void flushSerialInput() {
+    // Consume all characters in the serial input buffer
+    while (getchar_timeout_us(0) != PICO_ERROR_TIMEOUT) {
+        // Do nothing, just clear the buffer
+        // Maybe convert to just remove special characters like \n or \r later on
+    }
+}
+
+static float readFloatFromSerial() {
+    char buffer[32] = {0}; // Buffer to store the input
+    int index = 0;
+    char c;
+    
+    do{
+        c = getchar();
+    } while (c == ' ');
+    
+    // Read characters until Enter is pressed or buffer is full
+    while (index < sizeof(buffer) - 1) {
+        if (c == '\n' || c == '\r' || c =='\t' || c == ' '){ //in "Live ending" from sertial monitor, use LF(\n) or CR(\r), not both
+            break; // Stop reading on Enter key
+        }else if ((c< '0' || c > '9') && c != '.') { // non-numeric characters
+            ungetc(c, stdin); // Put back the character to the input stream
+            break;
+        }
+        if (c != PICO_ERROR_TIMEOUT) { // Ignore timeout errors
+            buffer[index++] = c;
+        }
+        c = getchar(); // Non-blocking read with timeout
+    }
+
+    buffer[index] = '\0'; // Null-terminate the string
+
+    // Convert the string to an float
+    return atof(buffer);
+}
+static char readCharFromSerial() {
+    int index = 0;
+    char c;
+    
+    // Read characters until Enter is pressed or buffer is full
+    while (1) {
+        c = getchar(); // Non-blocking read with timeout
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') { // Ignore spaces and tabs
+            return c;
+        }
+    }
+}
+
+
+static void handleRequests(void *pvParameters){ //parameters are not used, but needed to match the function signature
+    printf("Core %d: Launching handleRequests\n", get_core_num());
+    static int numsToCheck = 2; //number of result collected, maybe we want to expand it to more than 2 for redundancy
+    float sum;
+    data_t data; //data to be passed to the task
+    float result[numsToCheck]; //result of the sum, to be passed to the queue
+    bool equal = false; 
+    for( ;; )
+    {
+        printf("Enter an operation:");
+        flushSerialInput();
+        //Wait for input from the user
+        data.params[0] = readFloatFromSerial(); //read first number from serial port
+        data.operation = readCharFromSerial(); //read operation from serial port
+        data.params[1] = readFloatFromSerial(); //read second number from serial port
+        printf("Core %d: received %f %c %f\n", get_core_num(), data.params[0], data.operation ,data.params[1]); //reset equal flag
+        do{
+            equal = true; //reset equal flag
+            launchOPTasks(&data); //launch tasks on core 0 and core 1
+            //wait for tasks to finish
+            for(int j = 0; j < numsToCheck; j++){ 
+                xQueueReceive( xQueue, result+j, portMAX_DELAY ); //this read value from queue if present, otherwise block
+                printf("Core %d - Thread '%s': Queue receive %f\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()), (float)result[j]);
+                }
+            
+            sum = result[0];
+            for(int j = 1; j < numsToCheck && equal; j++){ //NOTE: have I to wait for all tasks to finish? or I can check while recieving
+                equal = (sum == result[j]); //check if all results are equal
+            }
+            if(!equal) {
+                printf("-----ERROR: RESULTS ARE NOT EQUAL\n"); //print error message
+            }
+        }while(!equal);
+
+        printf("Results are equal, sum is %f\n", sum); //print result
+        
+    }
+}
+
+static void launchOPTasks(void* parameters){
+    TaskHandle_t xTask0 = NULL; 
+    TaskHandle_t xTask1 = NULL;
+     //launch tasksk on core 0 and core 1
+    vTaskSuspendAll(); // Suspend the scheduler, it's not beautiful, but otherwise I cannot set the mask in time
+    xTaskCreate(     /* The function that implements the task. */
+        operativeTask,
+        /* Text name for the task, just to help debugging. */
+        "OT0",
+        /* The size (in words) of the stack that should be created
+        for the task. */
+        configMINIMAL_STACK_SIZE,
+        /* A parameter that can be passed into the task */
+        parameters,
+        /* The priority to assign to the task.  tskIDLE_PRIORITY
+        (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1
+        is the highest priority. */
+        mainOPERATIONS_PRIORITY,
+        /* Used to obtain a handle to the created task.  Not used in
+        this simple demo, so set to NULL. */
+        &xTask0);
+    vTaskCoreAffinitySet(xTask0, (1 << 0)); // Set task to run on core 0
+    
+    xTaskCreate(
+        operativeTask,
+        "OT1",
+        configMINIMAL_STACK_SIZE,
+        parameters,
+        mainOPERATIONS_PRIORITY,
+        &xTask1);
+    vTaskCoreAffinitySet(xTask1, (1 << 1)); // Set task to run on core 1
+
+    xTaskResumeAll(); // Resume the scheduler
+}
+
+/*-----------------------------------------------------------*/
+static float sum2nums(float a, float b) {
+    float ranNum = 0;
+    if((float)rand()/RAND_MAX < RAND_THRESHOLD) { //simulate core error 
+        ranNum = rand() % 10 + 1;
+    }
+    return a + b + ranNum; //return sum of two numbers + random number to simulate error
+}
+static float sub2nums(float a, float b) {
+    float ranNum = 0;
+    if((float)rand()/RAND_MAX < RAND_THRESHOLD) { //simulate core error 
+        ranNum = rand() % 10 + 1;
+    }
+    return a - b + ranNum; //return sum of two numbers + random number to simulate error
+}
+static float mul2nums(float a, float b) {
+    int ranNum = 0;
+    if((float)rand()/RAND_MAX < RAND_THRESHOLD) { //simulate core error 
+        ranNum = rand() % 10 + 1;
+    }
+    return a * b + ranNum; //return sum of two numbers + random number to simulate error
+}
+static float div2nums(float a, float b) {
+    float ranNum = 0;
+    if((float)rand()/RAND_MAX < RAND_THRESHOLD) { //simulate core error 
+        ranNum = rand() % 10 + 1;
+    }
+    return a / b + ranNum; //return sum of two numbers + random number to simulate error
+}
+
+static void operativeTask(void *pvParameters){
+        printf("Operative task is running on core %d\n", get_core_num());
+        data_t *data  = (data_t*)pvParameters;
+        float a = data->params[0]; //get first number from data structure
+        float b = data->params[1]; //get second number from data structure
+        char operation = data->operation; //get operation from data structure
+        float sum = 0; //result of the operation
+        switch (operation)
+        {
+        case '+':
+            sum = sum2nums(a, b); //sum two numbers
+            break;
+        case '-':
+            sum = sub2nums(a, b); //substract two numbers
+            break;
+        case '*':
+            sum = mul2nums(a, b); //multiply two numbers
+            break;
+        case '/':
+            if(b == 0) { //check for division by zero
+                printf("Core %d - Thread '%s': Division by zero\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()));
+                vTaskDelete(NULL); //terminate task, no more needed
+            }else{
+                sum = div2nums(a, b); //divide two numbers
+            }
+            break;
+        default:
+            printf("Core %d - Thread '%s': Unknown operation\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()));
+            vTaskDelete(NULL); //terminate task, no more needed
+            break;
+        }
+
+        printf("Core %d - Thread '%s': Result = %f\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()), sum);
+        xQueueSend( xQueue,  &sum, 0 ); //this send valiue to queue
+        
+        vTaskDelete(NULL); //terminate task, no more needed
+}
+
+/*-----------------------------------------------------------*/
+//NOT USED
 static void vExampleTimerCallback( TimerHandle_t xTimer )
 {
     /* Argument xTimer is not used due to this callback fucntion is not reused and use one timer only. */
@@ -261,120 +341,8 @@ static void vExampleTimerCallback( TimerHandle_t xTimer )
     execute periodically. */
     ulCountOfTimerCallbackExecutions++;
 }
-/*-----------------------------------------------------------*/
 
-static void prvQueueSendTask( void *pvParameters )
-{
-    TickType_t xNextWakeTime;
-    const uint32_t ulValueToSend = 100UL;
-
-    /* pvParameters is not used in this task function. */
-    ( void )pvParameters;
-
-    /* Initialise xNextWakeTime - this only needs to be done once. */
-    xNextWakeTime = xTaskGetTickCount();
-
-    for( ;; )
-    {
-        /* Place this task in the blocked state until it is time to run again.
-        The block time is specified in ticks, the constant used converts ticks
-        to ms.  The task will not consume any CPU time while it is in the
-        Blocked state. */
-        vTaskDelayUntil( &xNextWakeTime, mainQUEUE_SEND_PERIOD_MS );
-
-        /* Send to the queue - causing the queue receive task to unblock and
-        increment its counter.  0 is used as the block time so the sending
-        operation will not block - it shouldn't need to block as the queue
-        should always be empty at this point in the code. */
-        ulCountOfItemsSentOnQueue++;
-        printf("Core %d - Thread '%s': Queue send %ld\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()), ulCountOfItemsSentOnQueue);
-        xQueueSend( xQueue, &ulValueToSend, 0 );
-    }
-}
-/*-----------------------------------------------------------*/
-
-
-static void prvQueueReceiveTask( void *pvParameters )
-{
-    uint32_t ulReceivedValue;
-
-    /* pvParameters is not used in this task fucntion. */
-    ( void )pvParameters;
-
-    for( ;; )
-    {
-        /* Wait until something arrives in the queue - this task will block
-        indefinitely provided INCLUDE_vTaskSuspend is set to 1 in
-        FreeRTOSConfig.h. */
-        xQueueReceive( xQueue, &ulReceivedValue, portMAX_DELAY );
-        /*  To get here something must have been received from the queue, but
-        is it the expected value?  If it is, increment the counter. */
-        if( ulReceivedValue == 100UL )
-        {
-            /* Count the number of items that have been received correctly. */
-            ulCountOfItemsReceivedOnQueue++;
-            printf("Core %d - Thread '%s': Queue receive %ld\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()), ulCountOfItemsReceivedOnQueue);
-        }
-    }
-}
-/*-----------------------------------------------------------*/
-
-static void prvEventSemaphoreTask( void *pvParameters )
-{
-    /* pvParameters is not used in this task function. */
-    ( void )pvParameters;
-
-    for( ;; )
-    {
-        /* Block until the semaphore is 'given'.  NOTE:
-        A semaphore is used for example purposes.  In a real application it might
-        be preferable to use a direct to task notification, which will be faster
-        and use less RAM. */
-        xSemaphoreTake( xEventSemaphore, portMAX_DELAY );
-
-        /* Count the number of times the semaphore is received. */
-        ulCountOfReceivedSemaphores++;
-        printf("Core %d - Thread '%s': Semaphore taken %ld\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()), ulCountOfReceivedSemaphores);
-    }
-}
-/*-----------------------------------------------------------*/
-
-static void prvSDKMutexUseTask( void *pvParameters )
-{
-    /* pvParameters is not used in this task function. */
-    ( void )pvParameters;
-
-    for( ;; )
-    {
-        mutex_enter_blocking(&xSDKMutex);
-        ulCountOfSDKMutexEnters++;
-        printf("Core %d - Thread '%s': SDK Mutex Entered, sleeping for a while %ld\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()), ulCountOfSDKMutexEnters);
-        vTaskDelay(3000);
-        printf("Core %d - Thread '%s': Sleep finished; SDK Mutex releasing %ld\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()), ulCountOfSDKMutexEnters);
-        mutex_exit(&xSDKMutex);
-    }
-}
-/*-----------------------------------------------------------*/
-
-static void prvSDKSemaphoreUseTask( void *pvParameters )
-{
-    /* pvParameters is not used in this task function. */
-    ( void )pvParameters;
-
-    for( ;; )
-    {
-        absolute_time_t t = get_absolute_time();
-        if (sem_acquire_timeout_us(&xSDKSemaphore, 250500)) {
-            ulCountOfSDKSemaphoreAcquires++;
-            printf("Core %d - Thread '%s': SDK Sem acquired %ld\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()), ulCountOfSDKMutexEnters);
-        } else {
-            printf("Core %d - Thread '%s': SDK Sem wait timeout (ok) after %d us\n", get_core_num(), pcTaskGetName(xTaskGetCurrentTaskHandle()),
-                   (int)absolute_time_diff_us(t, get_absolute_time()));
-        }
-    }
-}
-/*-----------------------------------------------------------*/
-
+//NOT USED
 void vApplicationTickHook( void )
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -414,7 +382,7 @@ void vApplicationTickHook( void )
     so no further action is required. */
 }
 /*-----------------------------------------------------------*/
-
+//NOT USED
 void vApplicationMallocFailedHook( void )
 {
     /* The malloc failed hook is enabled by setting
@@ -428,7 +396,7 @@ void vApplicationMallocFailedHook( void )
     panic("malloc failed");
 }
 /*-----------------------------------------------------------*/
-
+//NOT USED
 void vApplicationStackOverflowHook( TaskHandle_t xTask, char *pcTaskName )
 {
     ( void ) pcTaskName;
@@ -442,7 +410,7 @@ void vApplicationStackOverflowHook( TaskHandle_t xTask, char *pcTaskName )
     for( ;; );
 }
 /*-----------------------------------------------------------*/
-
+//NOT USED
 void vApplicationIdleHook( void )
 {
     volatile size_t xFreeStackSpace;

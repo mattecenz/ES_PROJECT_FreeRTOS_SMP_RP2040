@@ -248,6 +248,7 @@ int main(void) {
 #else
     prvNonRTOSWorker();
 #endif
+    test_setup(void);
 }
 /*-----------------------------------------------------------*/
 
@@ -472,4 +473,136 @@ static void prvSetupHardware( void )
     /* And flash LED */
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+}
+
+/*-----------------------------------------------------------*/
+
+
+static int32_t sharedVariable = 0;
+static int32_t unsafeSharedVariable = 0;
+static SemaphoreHandle_t bin_sem;
+static TaskHandle_t masterTaskHandle = NULL;
+
+typedef struct {
+    int32_t value;
+    uint32_t repetitions;
+} TaskParams;
+
+static void vIncrementTask(void *pvParameters){
+    TaskParams *params = (TaskParams *)pvParameters;
+        for (uint32_t i = 0; i < params->repetitions; i++) {
+            if (xSemaphoreTake(bin_sem, portMAX_DELAY)) {
+                sharedVariable += params->value;
+                printf("Increment: sharedVariable = %ld\n", sharedVariable);
+                xSemaphoreGive(bin_sem);
+            }
+            vTaskDelay(pdMS_TO_TICKS(100));      
+        }
+    vPortFree(params);
+    xTaskNotifyGive(masterTaskHandle);
+    vTaskDelete(NULL);
+}
+
+
+static void vDecrementTask(void *pvParameters){
+    TaskParams *params = (TaskParams *)pvParameters;
+        for (uint32_t i = 0; i < params->repetitions; i++) {
+            if (xSemaphoreTake(bin_sem, portMAX_DELAY)) {
+                sharedVariable -= params->value;
+                printf("Decrement: sharedVariable = %ld\n", sharedVariable);
+                xSemaphoreGive(bin_sem);
+            }
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    vPortFree(params);
+    xTaskNotifyGive(masterTaskHandle);
+    vTaskDelete(NULL);
+}
+
+static void vIncrementUnsafeTask(void *pvParameters){
+    TaskParams *params = (TaskParams *)pvParameters;
+    for (uint32_t i = 0; i < params->repetitions; i++) {
+        unsafeSharedVariable += params->value;
+        printf("Increment (unsafe): sharedVariable = %ld\n", unsafeSharedVariable); 
+    }
+    vPortFree(params);
+    xTaskNotifyGive(masterTaskHandle);
+    vTaskDelete(NULL);
+}
+
+
+static void vDecrementUnsafeTask(void *pvParameters){
+    TaskParams *params = (TaskParams *)pvParameters;
+        for (uint32_t i = 0; i < params->repetitions; i++) {
+            unsafeSharedVariable -= params->value;
+            printf("Decrement (unsafe): sharedVariable = %ld\n", unsafeSharedVariable);
+        }
+    vPortFree(params);
+    xTaskNotifyGive(masterTaskHandle);
+    vTaskDelete(NULL);
+}
+
+
+static void vMasterTask(void *pvParameters) {
+    TaskHandle_t xSafeTask0 = NULL; 
+    TaskHandle_t xSafeTask1 = NULL;
+    TaskHandle_t xUnsafeTask0 = NULL; 
+    TaskHandle_t xUnsafeTask1 = NULL;
+
+    masterTaskHandle = xTaskGetCurrentTaskHandle();
+
+    bin_sem = xSemaphoreCreateBinary();
+    if (bin_sem == NULL) {
+        printf("Errore creazione semaforo\n");
+        vTaskDelete(NULL);
+    }
+    xSemaphoreGive(bin_sem);
+
+    // Parametri separati per ogni task
+    TaskParams *incParams = pvPortMalloc(sizeof(TaskParams));
+    TaskParams *decParams = pvPortMalloc(sizeof(TaskParams));
+    TaskParams *incUnsafeParams = pvPortMalloc(sizeof(TaskParams));
+    TaskParams *decUnsafeParams = pvPortMalloc(sizeof(TaskParams));
+
+    if (!incParams || !decParams || !incUnsafeParams || !decUnsafeParams) {
+        printf("Errore allocazione parametri\n");
+        vTaskDelete(NULL);
+    }
+
+    incParams->value = 5;
+    incParams->repetitions = 10;
+    decParams->value = 3;
+    decParams->repetitions = 7;
+    *incUnsafeParams = *incParams;
+    *decUnsafeParams = *decParams;
+
+    vTaskSuspendAll(); 
+    xTaskCreate(vIncrementTask, "IncrementTask", configMINIMAL_STACK_SIZE, incParams, tskIDLE_PRIORITY + 1, &xSafeTask0);
+    vTaskCoreAffinitySet(xSafeTask0, (1 << 1));
+    xTaskCreate(vDecrementTask, "DecrementTask", configMINIMAL_STACK_SIZE, decParams, tskIDLE_PRIORITY + 1, &xSafeTask1);
+    vTaskCoreAffinitySet(xSafeTask1, (1 << 1));
+    xTaskCreate(vIncrementUnsafeTask, "IncrementUnsafeTask", configMINIMAL_STACK_SIZE, incParams, tskIDLE_PRIORITY + 1, &xUnsafeTask0);
+    vTaskCoreAffinitySet(xUnsafeTask0, (1 << 0));
+    xTaskCreate(vDecrementUnsafeTask, "DecrementUnsafeTask", configMINIMAL_STACK_SIZE, decParams, tskIDLE_PRIORITY + 1, &xUnsafeTask1);
+    vTaskCoreAffinitySet(xUnsafeTask1, (1 << 0));
+    xTaskResumeAll();
+
+    for (int i = 0; i < 4; i++) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY); 
+    }
+    
+    
+    printf("\n=== RISULTATI FINALI ===\n");
+    printf("Sicuro: sharedVariable = %ld\n", sharedVariable);
+    printf("Non Sicuro: unsafeSharedVariable = %ld\n", unsafeSharedVariable);
+    printf("========================\n");
+    
+    vSemaphoreDelete(bin_sem);
+    vTaskDelete(NULL);
+}
+
+void test_setup(void){ 
+    vTaskSuspendAll(); 
+    xTaskCreate(vMasterTask, "MaterTask", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1, NULL);
+    xTaskResumeAll();
 }
