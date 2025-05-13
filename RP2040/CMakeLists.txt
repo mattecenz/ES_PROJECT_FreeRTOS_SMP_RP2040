@@ -6,8 +6,22 @@ cmake_minimum_required(VERSION 3.13)
 # Pull in SDK (must be before project)
 include(pico_sdk_import.cmake)
 
+include(pico_extras_import_optional.cmake)
+
 PROJECT(examples)
 
-add_subdirectory(OnEitherCore)
+if(USE_FREERTOS)
 
-add_subdirectory(OnBothCores)
+    add_subdirectory(OnEitherCore)
+
+    add_subdirectory(OnBothCores)
+
+else()
+
+    add_subdirectory(hello_serial)
+
+    add_subdirectory(hello_usb)
+
+    add_subdirectory(picow_tcp_client)
+
+endif()
