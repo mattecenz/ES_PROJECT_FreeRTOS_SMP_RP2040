@@ -101,8 +101,8 @@ static void vMasterFunction(void *pvParameters) {                               
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);                                                        \
     }                                                                                                   \
     printf("\n=== FINAL RESULTS ===\n");                                                                \
-    printf("return_core_0:\t ##conversion_char\n", return_val_0);                                       \
-    printf("return_core_1:\t ##conversion_char\n", return_val_1);                                       \
+    printf("return_core_0:\t" conversion_char"\n", return_val_0);                                       \
+    printf("return_core_1:\t" conversion_char"\n", return_val_1);                                       \
     printf("========================\n");                                                               \
     vTaskDelete(NULL);                                                                                  \
 }                                                                                                       \

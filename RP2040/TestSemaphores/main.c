@@ -36,7 +36,7 @@ static void shared_subtraction(){
     }
 }
 
-create_test_pipeline_void_functions(type_t, %d, shared_variable, shared_addition, shared_subtraction)
+create_test_pipeline_void_functions(type_t, "%d", shared_variable, shared_addition, shared_subtraction)
 
 int main(void) {
 
