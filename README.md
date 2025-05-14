@@ -78,7 +78,7 @@ To compile the project we can do:
 $ cd RP2040
 $ mkdir build
 $ cd build
-$ cmake .. -DPICO_BOARD=arduino_nano_rp2040_connect -DUSE_FREERTOS=1
+$ cmake .. -DPICO_BOARD=arduino_nano_rp2040_connect
 $ make
 ```
 

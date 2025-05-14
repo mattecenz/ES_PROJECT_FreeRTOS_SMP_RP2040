@@ -10,18 +10,6 @@ include(pico_extras_import_optional.cmake)
 
 PROJECT(examples)
 
-if(USE_FREERTOS)
+add_subdirectory(OnEitherCore)
 
-    add_subdirectory(OnEitherCore)
-
-    add_subdirectory(OnBothCores)
-
-else()
-
-    add_subdirectory(hello_serial)
-
-    add_subdirectory(hello_usb)
-
-    add_subdirectory(picow_tcp_client)
-
-endif()
+add_subdirectory(TestSemaphores)
