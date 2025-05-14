@@ -34,12 +34,12 @@ target_compile_options( test_semaphore_common INTERFACE
         )
 
 add_executable(test_semaphore_nonts)
-target_link_libraries(test_semaphore_nonts on_either_core_common)
+target_link_libraries(test_semaphore_nonts test_semaphore_common)
 pico_add_extra_outputs(test_semaphore_nonts)
 pico_enable_stdio_usb(test_semaphore_nonts 1)
 
 add_executable(test_semaphore_ts)
-target_link_libraries(test_semaphore_ts on_either_core_common)
+target_link_libraries(test_semaphore_ts test_semaphore_common)
 target_compile_definitions(test_semaphore_ts PRIVATE
         THREAD_SAFE=1
 )
