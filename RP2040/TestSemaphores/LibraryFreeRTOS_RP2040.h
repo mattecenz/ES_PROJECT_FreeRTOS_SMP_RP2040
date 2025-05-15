@@ -94,12 +94,10 @@ vTaskCoreAffinitySet(return_handle, (1 << n));                                  
 static void vMasterFunction() {                                                                         \
     TaskHandle_t slaveTaskHandleCore_0 = NULL;                                                          \
     TaskHandle_t slaveTaskHandleCore_1 = NULL;                                                          \
-    vTaskSuspendAll();                                                                                  \
     create_task_on_core(0, vSlaveFunctionCore_0, slaveTaskHandleCore_0)                                 \
     create_task_on_core(1, vSlaveFunctionCore_1, slaveTaskHandleCore_1)                                 \
-    xTaskResumeAll();                                                                                   \
     for (int i = 0; i < 2; i++) {                                                                       \
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);                                                        \
+        ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
     }                                                                                                   \
     printf("\n=== FINAL RESULTS ===\n");                                                                \
     printf("return_core_0:\t" conversion_char"\n", return_val_0);                                       \
