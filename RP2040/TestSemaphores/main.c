@@ -10,6 +10,9 @@ static type_t shared_variable = 0;
 static SemaphoreHandle_t bin_sem;
 #endif
 
+#pragma GCC push_options
+#pragma GCC optimize ("O0")
+
 static void shared_addition(){
     for(uint32_t i=0;i<N_ITER;++i){
         #ifdef THREAD_SAFE
@@ -36,7 +39,9 @@ static void shared_subtraction(){
     }
 }
 
-create_test_pipeline_void_functions(type_t, "%d", shared_variable, shared_addition, shared_subtraction)
+#pragma GCC pop_options
+
+create_test_pipeline_void_functions(type_t, "%ld", shared_variable, shared_addition, shared_subtraction)
 
 int main(void) {
 

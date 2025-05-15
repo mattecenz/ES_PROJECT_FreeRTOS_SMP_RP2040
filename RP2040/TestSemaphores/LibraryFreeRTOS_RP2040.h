@@ -73,7 +73,7 @@ create_slave_void_function(1, function_name_core2)                              
 create_master_function(conversion_char, function_name, return_name, return_name)                \
 
 #define create_slave_void_function(n, function_name)                        \
-static void vSlaveFunctionCore_##n(void* pvParameters){                     \
+static void vSlaveFunctionCore_##n(){                                       \
     function_name();                                                        \
     xTaskNotifyGive(masterTaskHandle);                                      \
     vTaskDelete(NULL);                                                      \
@@ -89,7 +89,7 @@ xTaskCreate(task_name,                                                          
 vTaskCoreAffinitySet(return_handle, (1 << n));                                      \
 
 #define create_master_function(conversion_char, function_name, return_val_0, return_val_1)              \
-static void vMasterFunction(void *pvParameters) {                                                       \
+static void vMasterFunction() {                                                                         \
     masterTaskHandle = xTaskGetCurrentTaskHandle();                                                     \
     TaskHandle_t slaveTaskHandleCore_0 = NULL;                                                          \
     TaskHandle_t slaveTaskHandleCore_1 = NULL;                                                          \
