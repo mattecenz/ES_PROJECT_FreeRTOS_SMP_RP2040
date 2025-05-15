@@ -33,6 +33,8 @@ void start_FreeRTOS(){
     vTaskStartScheduler();
 }
 
+#define STRING(s) #s
+
 /**
 Macro which creates 3 tasks specified in this way:
 
@@ -52,7 +54,7 @@ static return_type return_core_0;                                               
 static return_type return_core_1;                                                               \
 create_slave_function(0, return_type, function_name, __VA_ARGS__)                               \
 create_slave_function(1, return_type, function_name, __VA_ARGS__)                               \
-create_master_function(conversion_char, function_name, return_core_0, return_core_1)            \
+create_master_function(conversion_char, return_core_0, return_core_1)                           \
 
 #define create_slave_function(n, return_type, function_name, ...)           \
 static void vSlaveFunctionCore_##n(void* pvParameters){                     \
@@ -70,7 +72,7 @@ Moreover we assume that both of the functions access the same shared variable, a
 static TaskHandle_t masterTaskHandle = NULL;                                                    \
 create_slave_void_function(0, function_name_core1)                                              \
 create_slave_void_function(1, function_name_core2)                                              \
-create_master_function(conversion_char, function_name, return_name, return_name)                \
+create_master_function(conversion_char, return_name, return_name)                               \
 
 #define create_slave_void_function(n, function_name)                        \
 static void vSlaveFunctionCore_##n(){                                       \
@@ -81,16 +83,15 @@ static void vSlaveFunctionCore_##n(){                                       \
 
 #define create_task_on_core(n, task_name, return_handle)                            \
 xTaskCreate(task_name,                                                              \
-    "task_name",                                                                    \
+    STRING(task_name),                                                              \
     configMINIMAL_STACK_SIZE,                                                       \
     NULL,                                                                           \
     tskIDLE_PRIORITY + 1,                                                           \
     &return_handle);                                                                \
 vTaskCoreAffinitySet(return_handle, (1 << n));                                      \
 
-#define create_master_function(conversion_char, function_name, return_val_0, return_val_1)              \
+#define create_master_function(conversion_char, return_val_0, return_val_1)                             \
 static void vMasterFunction() {                                                                         \
-    masterTaskHandle = xTaskGetCurrentTaskHandle();                                                     \
     TaskHandle_t slaveTaskHandleCore_0 = NULL;                                                          \
     TaskHandle_t slaveTaskHandleCore_1 = NULL;                                                          \
     vTaskSuspendAll();                                                                                  \
@@ -113,10 +114,10 @@ Method which creates the master task.
 
 #define start_test_pipeline()       \
 xTaskCreate(vMasterFunction,        \
-    "MasterTask",                   \
+    "vMasterFunction",              \
     configMINIMAL_STACK_SIZE,       \
     NULL,                           \
     tskIDLE_PRIORITY + 1,           \
-    NULL);                          \
+    &masterTaskHandle);             \
 
 #endif
