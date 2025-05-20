@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "pico/stdlib.h"
+#include "hardware/timer.h"
 #include "pico/multicore.h"
 
 /**
@@ -35,6 +36,22 @@ void start_FreeRTOS(){
 
 #define STRING(s) #s
 
+#define create_return_struct(return_type)       \
+struct struct_return_info_t{                    \
+    return_type return_core_0;                  \
+    return_type return_core_1;                  \
+    uint64_t    return_time_0;                  \
+    uint64_t    return_time_1;                  \
+};                                              \
+static struct struct_return_info_t return_info; \
+
+#define save_time_now()                                 \
+absolute_time_t saved_time = get_absolute_time()        \
+
+#define calc_time_diff()                                \
+absolute_time_diff_us(saved_time,get_absolute_time())   \
+
+
 /**
 Macro which creates 3 tasks specified in this way:
 
@@ -50,33 +67,37 @@ NB: it is assumed that the type returned by the task for the moment is a simple 
 
 #define create_test_pipeline_function(return_type, conversion_char, function_name, ...)         \
 static TaskHandle_t masterTaskHandle = NULL;                                                    \
-static return_type return_core_0;                                                               \
-static return_type return_core_1;                                                               \
+create_return_struct(return_type)                                                               \
 create_slave_function(0, return_type, function_name, __VA_ARGS__)                               \
 create_slave_function(1, return_type, function_name, __VA_ARGS__)                               \
-create_master_function(conversion_char, return_core_0, return_core_1)                           \
+create_master_function(conversion_char, return_info.return_core_0, return_info.return_core_1)   \
 
 #define create_slave_function(n, return_type, function_name, ...)           \
 static void vSlaveFunctionCore_##n(void* pvParameters){                     \
-    return_core_##n=function_name(__VA_ARGS__);                             \
+    save_time_now();                                                        \
+    return_info.return_core_##n=function_name(__VA_ARGS__);                 \
+    return_info.return_time_##n=calc_time_diff();                           \
     xTaskNotifyGive(masterTaskHandle);                                      \
     vTaskDelete(NULL);                                                      \
 }                                                                           \
 
-/**
+/**                                                 
 With this method we pass two functions, to be executed one per core.
 Moreover we assume that both of the functions access the same shared variable, accessed by "return_name".
  */
 
 #define create_test_pipeline_void_functions(return_type, conversion_char, return_name, function_name_core1, function_name_core2)    \
 static TaskHandle_t masterTaskHandle = NULL;                                                    \
+create_return_struct(return_type)                                                               \
 create_slave_void_function(0, function_name_core1)                                              \
 create_slave_void_function(1, function_name_core2)                                              \
 create_master_function(conversion_char, return_name, return_name)                               \
 
 #define create_slave_void_function(n, function_name)                        \
 static void vSlaveFunctionCore_##n(){                                       \
+    save_time_now();                                                        \
     function_name();                                                        \
+    return_info.return_time_##n=calc_time_diff();                           \
     xTaskNotifyGive(masterTaskHandle);                                      \
     vTaskDelete(NULL);                                                      \
 }                                                                           \
@@ -102,6 +123,8 @@ static void vMasterFunction() {                                                 
     printf("\n=== FINAL RESULTS ===\n");                                                                \
     printf("return_core_0:\t" conversion_char"\n", return_val_0);                                       \
     printf("return_core_1:\t" conversion_char"\n", return_val_1);                                       \
+    printf("return_time_0:\t %llu \n", return_info.return_time_0);                                      \
+    printf("return_time_1:\t %llu \n", return_info.return_time_1);                                      \
     printf("========================\n");                                                               \
     vTaskDelete(NULL);                                                                                  \
 }                                                                                                       \
