@@ -196,7 +196,7 @@ static void handleRequests(void *pvParameters){ //parameters are not used, but n
     bool equal = false; 
     for( ;; )
     {
-        printf("Enter an operation:");
+        printf("Enter an operation:\n");
         flushSerialInput();
         //Wait for input from the user
         data.params[0] = readFloatFromSerial(); //read first number from serial port
