@@ -13,3 +13,5 @@ PROJECT(examples)
 add_subdirectory(OnEitherCore)
 
 add_subdirectory(TestSemaphores)
+
+add_subdirectory(picow_tcp_client)

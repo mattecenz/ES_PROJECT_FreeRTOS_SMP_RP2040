@@ -13,14 +13,14 @@ while port is None:
 ser = serial.Serial(
     port=port.device, 
     baudrate=115200,
-    timeout=5,  # Set a timeout for read operations, if triggered it just continues with the program   
+    #timeout=5,  # Set a timeout for read operations, if triggered it just continues with the program   
 )
 
 for i in range(10):
     print(ser.read_until(b'Enter an operation:\r\n').decode('utf-8')) #read from serial and print it
-    time.sleep(1) # ESSENTIAL TIMEOUT, OTHERWISE MAY BLOCK. IDK WHY     D: D: D:
-    ser.write(b"10 / 3\n") # write to serial, '\n' is the end of line character to use, not '\r'
-    
+    #time.sleep(1) # ESSENTIAL TIMEOUT, OTHERWISE MAY BLOCK. IDK WHY     D: D: D:
+    ser.write(b"10 + 3\n") # write to serial, '\n' is the end of line character to use, not '\r'
+    print(f"SENT_{i}")
 print(ser.read_until(b'Enter an operation:\r\n').decode('utf-8')) # read the final response
 
 ser.close()
