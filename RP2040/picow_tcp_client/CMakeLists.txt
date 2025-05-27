@@ -19,7 +19,6 @@ target_compile_definitions(picow_tcpip_client_background PRIVATE
         )
 target_include_directories(picow_tcpip_client_background PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_CURRENT_LIST_DIR}/.. # for our common lwipopts
         )
 target_link_libraries(picow_tcpip_client_background
         pico_cyw43_arch_lwip_threadsafe_background
@@ -38,7 +37,6 @@ target_compile_definitions(picow_tcpip_client_poll PRIVATE
         )
 target_include_directories(picow_tcpip_client_poll PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
-        ${CMAKE_CURRENT_LIST_DIR}/.. # for our common lwipopts
         )
 target_link_libraries(picow_tcpip_client_poll
         pico_cyw43_arch_lwip_poll
