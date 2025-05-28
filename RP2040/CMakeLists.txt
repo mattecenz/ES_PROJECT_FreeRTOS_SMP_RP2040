@@ -10,6 +10,8 @@ include(pico_extras_import_optional.cmake)
 
 PROJECT(examples)
 
-add_subdirectory(OnEitherCore)
+#add_subdirectory(OnEitherCore)
 
-add_subdirectory(TestSemaphores)
+#add_subdirectory(TestSemaphores)
+
+add_subdirectory(TestFreeRTOSWifi)

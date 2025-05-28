@@ -87,3 +87,5 @@ $ make
 **NB:** I needed to slightly change the cmake found on the repository, as it seems that the version I downloaded had some warnings which were not suppressed.
 
 And in the `build/OnEitherCore` we should see the **.uf2** files which can be deployed in the board.
+
+**NB:** if the test with the wifi module has to be compiled, the correct pico board is `-DPICO_BOARD=pico_w`.
