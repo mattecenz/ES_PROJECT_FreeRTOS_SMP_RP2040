@@ -27,6 +27,10 @@ add_executable(on_core_zero)
 target_link_libraries(on_core_zero on_either_core_common)
 pico_add_extra_outputs(on_core_zero)
 pico_enable_stdio_usb(on_core_zero 1)
+target_compile_definitions(on_core_zero PRIVATE
+        mainRUN_FREE_RTOS_ON_CORE=0
+        PICO_STACK_SIZE=0x1000
+)
 
 add_executable(on_core_one)
 target_link_libraries(on_core_one on_either_core_common)
