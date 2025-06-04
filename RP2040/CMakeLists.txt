@@ -12,6 +12,6 @@ PROJECT(examples)
 
 #add_subdirectory(OnEitherCore)
 
-#add_subdirectory(TestSemaphores)
+add_subdirectory(TestSemaphores)
 
-add_subdirectory(TestFreeRTOSWifi)
+#add_subdirectory(TestFreeRTOSWifi)

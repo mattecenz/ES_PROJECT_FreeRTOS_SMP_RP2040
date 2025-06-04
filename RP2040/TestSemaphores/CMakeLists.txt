@@ -1,13 +1,10 @@
 cmake_minimum_required(VERSION 3.13)
 
-# Pull in SDK (must be before project)
-include(pico_sdk_import.cmake)
-# Pull in FreeRTOS
-include(FreeRTOS_Kernel_import.cmake)
-
 project(example C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
+
+set(PROJECT_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/../include)
 
 pico_sdk_init()
 
@@ -16,7 +13,12 @@ target_sources(test_semaphore_common INTERFACE
         main.c)
 target_include_directories(test_semaphore_common INTERFACE
         ${CMAKE_CURRENT_LIST_DIR}
+        ${PROJECT_INCLUDE_DIR}
         )
+
+# Pull in FreeRTOS
+include(${PROJECT_INCLUDE_DIR}/FreeRTOS_Kernel_import.cmake)
+
 target_link_libraries(test_semaphore_common INTERFACE
         FreeRTOS-Kernel
         FreeRTOS-Kernel-Heap1
