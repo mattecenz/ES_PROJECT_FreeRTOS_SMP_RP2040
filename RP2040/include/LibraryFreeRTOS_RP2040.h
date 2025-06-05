@@ -1,6 +1,3 @@
-#ifndef LIBRARY_FREE_RTOS_RP2040_H
-#define LIBRARY_FREE_RTOS_RP2040_H
-
 // ------------------------------------------------------------------------ //
 //  INTRODUCTION                                                            //
 // ------------------------------------------------------------------------ //
@@ -22,11 +19,15 @@ Authors:
 
 */
 
+#ifndef LIBRARY_FREE_RTOS_RP2040_H
+#define LIBRARY_FREE_RTOS_RP2040_H
+
 // ------------------------------------------------------------------------ //
 //  GENERIC INCLUDES                                                        //
 // ------------------------------------------------------------------------ //
 
 #include "FreeRTOS.h" /* Must come first. */
+#include "LibraryFreeRTOS_RP2040Config.h"
 #include "task.h"     /* RTOS task related API prototypes. */
 #include "semphr.h"   /* Semaphore related API prototypes. */
 #include <stdio.h>
@@ -37,13 +38,6 @@ Authors:
 // ------------------------------------------------------------------------ //
 //  UTILITIES MACROS                                                        //
 // ------------------------------------------------------------------------ //
-
-/*
-    Define used to specify the priorities of the master and slave tasks.
-*/
-
-#define tskSLAVE_PRIORITY  tskIDLE_PRIORITY + 1
-#define tskMASTER_PRIORITY tskSLAVE_PRIORITY + 1
 
 /*
     Wrapper to convert macro argument into string.
@@ -134,16 +128,15 @@ static void vSlaveFunctionCore_##n(){                                       \
         - task_name     : unique identifier used to recognize the task.
         - return_handle : TaskHandle_t object used to store the information about the task.
 
-    By default the tasks have minimal stack size (defined by configMINIMAL_STACK_SIZE),
-    no input arguments, and priority equal to the idle task + 1.
+    The priorities of the tasks and the task size are taken by the Config file defined by the user.
 */
 
 #define create_slave_task_on_core(n, task_name, return_handle)                      \
 xTaskCreate(task_name,                                                              \
     STRING(task_name),                                                              \
-    configMINIMAL_STACK_SIZE,                                                       \
+    RP2040config_tskSLAVE_STACK_SIZE##n,                                            \
     NULL,                                                                           \
-    tskSLAVE_PRIORITY,                                                              \
+    RP2040config_tskSLAVE_PRIORITY##n,                                              \
     &return_handle);                                                                \
 vTaskCoreAffinitySet(return_handle, (1 << n));                                      \
 
@@ -193,7 +186,7 @@ void start_hw(){
     // Flash LED
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
-
+    // Wait some time for all the setup to complete (just to be sure)
     sleep_ms(5000);
 }
 
@@ -271,12 +264,12 @@ create_master_function(conversion_char, return_name, return_name)               
     have terminated their execution.
 */
 
-#define start_test_pipeline()       \
-xTaskCreate(vMasterFunction,        \
-    "vMasterFunction",              \
-    configMINIMAL_STACK_SIZE,       \
-    NULL,                           \
-    tskMASTER_PRIORITY,             \
-    &masterTaskHandle);             \
+#define start_test_pipeline()           \
+xTaskCreate(vMasterFunction,            \
+    "vMasterFunction",                  \
+    RP2040config_tskMASTER_STACK_SIZE,  \
+    NULL,                               \
+    RP2040config_tskMASTER_PRIORITY,    \
+    &masterTaskHandle);                 \
 
 #endif
