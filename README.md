@@ -47,7 +47,9 @@ Picotool is a useful program which can help us with flashing the code directly o
 
 We can simply clone the [official repository](https://github.com/raspberrypi/picotool) and then compile it:
 
-**NB:** When using the latest version of CMake 4.0.0 (and onwards), the support of versions <3.5 has been removed. So we need to update `pico-sdk/lib/mbedtls/CMakeLists.txt:23` and put the minimum version to 3.5. This is a problem of the open source project and it cannot be avoided. (At the moment I have opened an [Issue on Github](https://github.com/Mbed-TLS/mbedtls/issues/10123),let's see what they answer with).
+**NB:** There is a compatibility issue with the current version of picotool (2.1.1) and CMake 4.0.0. In order to solve the issue one has either to manually fix the error in the `CMakeListst.txt` or compile the `develop` branch of the repository. The issue will be solved in the next release.
+
+**NB:** Remember to have `PICO_SDK_PATH` enabled.
 
 ```
 $ git clone https://github.com/raspberrypi/picotool.git
@@ -57,8 +59,6 @@ $ cd build
 $ cmake -DCMAKE_INSTALL_PREFIX=<path> -DPICOTOOL_FLAT_INSTALL=1 ..
 $ make install
 ```
-
-**NB:** Remember to have `PICO_SDK_PATH` enabled.
 
 Then we can export the environment variable:
 
@@ -89,3 +89,19 @@ $ make
 And in the `build/OnEitherCore` we should see the **.uf2** files which can be deployed in the board.
 
 **NB:** if the test with the wifi module has to be compiled, the correct pico board is `-DPICO_BOARD=pico_w`.
+
+## HOWTO NAVIGATE THE DIRECTORIES
+
+The [RP2040/CMakeLists.txt](./RP2040/CMakeLists.txt) file decides which of the subdirectories to compile. 
+
+For the moment the choice is manual, but can be improved by using environment variables (TODO).
+
+The main test resides in [TestSemaphores](./RP2040/TestSemaphores/).
+
+The directory is composed of a cmake file which imports all the necessary files found in [include](./RP2040/include/).
+
+These files are both cmake commands to find the FreeRTOS kernel (if not specified manually) and FreeRTOS configuration files.
+
+The real library is implemented in [LibraryFreeRTOS_RP2040.h](./RP2040/include/LibraryFreeRTOS_RP2040.h), which is extensively commented.
+
+#
