@@ -92,7 +92,7 @@ absolute_time_diff_us(saved_time,get_absolute_time())   \
     both the output value and the time taken to run it.
 */
 
-#define create_slave_function(n, return_type, function_name, ...)                   \
+#define create_slave_function(test_name, n, return_type, function_name, ...)        \
 static void vSlaveFunction_##test_name##n(void* pvParameters){                      \
     save_time_now();                                                                \
     return_info_##test_name.return_core_##n=function_name(__VA_ARGS__);             \
@@ -231,7 +231,7 @@ static TaskHandle_t masterTaskHandle_##test_name = NULL;                        
 create_return_struct(test_name, return_type)                                                                \
 create_slave_function(test_name, 0, return_type, function_name, __VA_ARGS__)                                \
 create_slave_function(test_name, 1, return_type, function_name, __VA_ARGS__)                                \
-create_master_function(test_name, conversion_char, return_info.return_core_0, return_info.return_core_1)    \
+create_master_function(test_name, conversion_char, return_info_##test_name.return_core_0, return_info_##test_name.return_core_1)    \
 
 /**
     Macro which creates the testing pipeline for void functions.

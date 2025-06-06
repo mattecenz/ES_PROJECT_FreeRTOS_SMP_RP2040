@@ -54,7 +54,12 @@ static void shared_subtraction(){
 
 #pragma GCC pop_options
 
-create_test_pipeline_void_functions(test_ts, type_t, "%ld", shared_variable, shared_addition, shared_subtraction)
+create_test_pipeline_void_functions(test_ts, 
+    type_t, 
+    "%ld", 
+    shared_variable, 
+    shared_addition, 
+    shared_subtraction)
 
 int main(void) {
 
