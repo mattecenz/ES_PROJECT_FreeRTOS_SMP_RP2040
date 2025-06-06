@@ -93,7 +93,7 @@ absolute_time_diff_us(saved_time,get_absolute_time())   \
 */
 
 #define create_slave_function(test_name, n, return_type, function_name, ...)        \
-static void vSlaveFunction_##test_name##n(void* pvParameters){                      \
+static void vSlaveFunction_##test_name##n(){                                        \
     save_time_now();                                                                \
     return_info_##test_name.return_core_##n=function_name(__VA_ARGS__);             \
     return_info_##test_name.return_time_##n=calc_time_diff();                       \
