@@ -47,18 +47,19 @@ Authors:
 
 /*
     Creator of the return struct type and static variable.
+    It needs to be specified the name of the test in order to create a unique struct per test.
     For now it contains the return value associated to the functions 
     deployed on each core and their respective timings.
 */
 
-#define create_return_struct(return_type)       \
-struct struct_return_info_t{                    \
-    return_type return_core_0;                  \
-    return_type return_core_1;                  \
-    uint64_t    return_time_0;                  \
-    uint64_t    return_time_1;                  \
-};                                              \
-static struct struct_return_info_t return_info; \
+#define create_return_struct(test_name, return_type)                            \
+struct struct_return_info_##test_name{                                          \
+    return_type return_core_0;                                                  \
+    return_type return_core_1;                                                  \
+    uint64_t    return_time_0;                                                  \
+    uint64_t    return_time_1;                                                  \
+};                                                                              \
+static struct struct_return_info_##test_name return_info_##test_name;           \
 
 /*
     Macro used to store in an internal variable the time read 
@@ -81,6 +82,7 @@ absolute_time_diff_us(saved_time,get_absolute_time())   \
     Macro used for creating the function wrapper which runs on a specific core.
 
     Arguments:
+        - test_name     : unique identifier of the test name
         - n             : designated core.
         - return_type   : return value of the function (specified by the dev).
         - function_name : name of the function to be called (specified by the dev).
@@ -90,19 +92,20 @@ absolute_time_diff_us(saved_time,get_absolute_time())   \
     both the output value and the time taken to run it.
 */
 
-#define create_slave_function(n, return_type, function_name, ...)           \
-static void vSlaveFunctionCore_##n(void* pvParameters){                     \
-    save_time_now();                                                        \
-    return_info.return_core_##n=function_name(__VA_ARGS__);                 \
-    return_info.return_time_##n=calc_time_diff();                           \
-    xTaskNotifyGive(masterTaskHandle);                                      \
-    vTaskDelete(NULL);                                                      \
-}                                                                           \
+#define create_slave_function(n, return_type, function_name, ...)                   \
+static void vSlaveFunction_##test_name##n(void* pvParameters){                      \
+    save_time_now();                                                                \
+    return_info_##test_name.return_core_##n=function_name(__VA_ARGS__);             \
+    return_info_##test_name.return_time_##n=calc_time_diff();                       \
+    xTaskNotifyGive(masterTaskHandle_##test_name);                                  \
+    vTaskDelete(NULL);                                                              \
+}                                                                                   \
 
 /*
     Macro used for creating a wrapper for a void function to be launched on a specific core.
 
     Arguments:
+        - test_name     : unique identifier of the test name
         - n             : designated core.
         - function_name : name of the function to be called (specified by the dev).
 
@@ -110,12 +113,12 @@ static void vSlaveFunctionCore_##n(void* pvParameters){                     \
     the time taken to run it.
 */
 
-#define create_slave_void_function(n, function_name)                        \
-static void vSlaveFunctionCore_##n(){                                       \
+#define create_slave_void_function(test_name, n, function_name)             \
+static void vSlaveFunction_##test_name##n(){                                \
     save_time_now();                                                        \
     function_name();                                                        \
-    return_info.return_time_##n=calc_time_diff();                           \
-    xTaskNotifyGive(masterTaskHandle);                                      \
+    return_info_##test_name.return_time_##n=calc_time_diff();               \
+    xTaskNotifyGive(masterTaskHandle_##test_name);                          \
     vTaskDelete(NULL);                                                      \
 }                                                                           \
 
@@ -144,6 +147,7 @@ vTaskCoreAffinitySet(return_handle, (1 << n));                                  
     Macro used to create the function associated to the master task.
 
     Arguments:
+        - test_name         : unique identifier of the test name
         - conversion_char   : identifier to convert the result of the function in a string.
         - return_val_0      : name of the variable where the result of the core 0 is stored.
         - return_val_1      : name of the variable where the result of the core 1 is stored.
@@ -152,23 +156,22 @@ vTaskCoreAffinitySet(return_handle, (1 << n));                                  
     and it waits for their completion to collect and print their results.
 */
 
-#define create_master_function(conversion_char, return_val_0, return_val_1)         \
-static void vMasterFunction() {                                                     \
-    TaskHandle_t vSlaveFunctionHandle_0 = NULL;                                     \
-    TaskHandle_t vSlaveFunctionHandle_1 = NULL;                                     \
-    create_slave_task_on_core(0, vSlaveFunctionCore_0, vSlaveFunctionHandle_0)      \
-    create_slave_task_on_core(1, vSlaveFunctionCore_1, vSlaveFunctionHandle_1)      \
-    for (int i = 0; i < 2; i++) {                                                   \
-        ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                   \
-    }                                                                               \
-    printf("\n=== FINAL RESULTS ===\n");                                            \
-    printf("return_core_0:\t" conversion_char"\n", return_val_0);                   \
-    printf("return_core_1:\t" conversion_char"\n", return_val_1);                   \
-    printf("return_time_0:\t %llu \n", return_info.return_time_0);                  \
-    printf("return_time_1:\t %llu \n", return_info.return_time_1);                  \
-    printf("========================\n");                                           \
-    vTaskDelete(NULL);                                                              \
-}                                                                                   \
+#define create_master_function(test_name, conversion_char, return_val_0, return_val_1)                  \
+static void vMasterFunction_##test_name() {                                                             \
+    TaskHandle_t vSlaveFunctionHandle0_##test_name = NULL;                                              \
+    TaskHandle_t vSlaveFunctionHandle1_##test_name = NULL;                                              \
+    create_slave_task_on_core(0, vSlaveFunction_##test_name##0, vSlaveFunctionHandle0_##test_name)      \
+    create_slave_task_on_core(1, vSlaveFunction_##test_name##1, vSlaveFunctionHandle1_##test_name)      \
+    for (int i = 0; i < 2; i++) {                                                                       \
+        ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
+    }                                                                                                   \
+    printf(STRING(test_name)" has ended correctly!\n");                                                 \
+    printf(STRING(test_name)"> return_core_0:\t" conversion_char"\n", return_val_0);                    \
+    printf(STRING(test_name)"> return_core_1:\t" conversion_char"\n", return_val_1);                    \
+    printf(STRING(test_name)"> return_time_0:\t %llu \n", return_info_##test_name.return_time_0);       \
+    printf(STRING(test_name)"> return_time_1:\t %llu \n", return_info_##test_name.return_time_1);       \
+    vTaskDelete(NULL);                                                                                  \
+}                                                                                                       \
 
 // ------------------------------------------------------------------------ //
 //  PUBLIC INTERFACE                                                        //
@@ -205,6 +208,7 @@ void start_FreeRTOS(){
 
     Arguments:
 
+        - test_name         : unique identifier of the test name
         - return_type       : return value of the function.
         - conversion_char   : identifier to convert the result of the function in a string (e.g. int32_t -> "%d").
         - function_name     : name of the function to be called.
@@ -222,18 +226,19 @@ void start_FreeRTOS(){
 
  */
 
-#define create_test_pipeline_function(return_type, conversion_char, function_name, ...)         \
-static TaskHandle_t masterTaskHandle = NULL;                                                    \
-create_return_struct(return_type)                                                               \
-create_slave_function(0, return_type, function_name, __VA_ARGS__)                               \
-create_slave_function(1, return_type, function_name, __VA_ARGS__)                               \
-create_master_function(conversion_char, return_info.return_core_0, return_info.return_core_1)   \
+#define create_test_pipeline_function(test_name, return_type, conversion_char, function_name, ...)          \
+static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
+create_return_struct(test_name, return_type)                                                                \
+create_slave_function(test_name, 0, return_type, function_name, __VA_ARGS__)                                \
+create_slave_function(test_name, 1, return_type, function_name, __VA_ARGS__)                                \
+create_master_function(test_name, conversion_char, return_info.return_core_0, return_info.return_core_1)    \
 
 /**
     Macro which creates the testing pipeline for void functions.
 
     Arguments:
 
+        - test_name             : unique identifier of the test name
         - return_type           : return value of the function.
         - conversion_char       : identifier to convert the result of the function in a string (e.g. int32_t -> "%d").
         - return_name           : name of the shared variable accessed by the void functions.
@@ -245,15 +250,15 @@ create_master_function(conversion_char, return_info.return_core_0, return_info.r
 
  */
 
-#define create_test_pipeline_void_functions(return_type, conversion_char, return_name, function_name_core1, function_name_core2)    \
-static TaskHandle_t masterTaskHandle = NULL;                                                    \
-create_return_struct(return_type)                                                               \
-create_slave_void_function(0, function_name_core1)                                              \
-create_slave_void_function(1, function_name_core2)                                              \
-create_master_function(conversion_char, return_name, return_name)                               \
+#define create_test_pipeline_void_functions(test_name, return_type, conversion_char, return_name, function_name_core1, function_name_core2)     \
+static TaskHandle_t masterTaskHandle_##test_name = NULL;                                        \
+create_return_struct(test_name, return_type)                                                    \
+create_slave_void_function(test_name, 0, function_name_core1)                                   \
+create_slave_void_function(test_name, 1, function_name_core2)                                   \
+create_master_function(test_name, conversion_char, return_name, return_name)                    \
 
 /**
-    Method which creates the master task.
+    Method which creates the master task assigned to a specific test name.
 
     The master task launches the master function.
 
@@ -264,12 +269,12 @@ create_master_function(conversion_char, return_name, return_name)               
     have terminated their execution.
 */
 
-#define start_test_pipeline()           \
-xTaskCreate(vMasterFunction,            \
-    "vMasterFunction",                  \
-    RP2040config_tskMASTER_STACK_SIZE,  \
-    NULL,                               \
-    RP2040config_tskMASTER_PRIORITY,    \
-    &masterTaskHandle);                 \
+#define start_test_pipeline(test_name)      \
+xTaskCreate(vMasterFunction_##test_name,    \
+    "vMasterFunction"STRING(test_name),     \
+    RP2040config_tskMASTER_STACK_SIZE,      \
+    NULL,                                   \
+    RP2040config_tskMASTER_PRIORITY,        \
+    &masterTaskHandle_##test_name);         \
 
 #endif
