@@ -12,7 +12,7 @@ Instructions taken from [this](https://datasheets.raspberrypi.com/pico/getting-s
 
 In the parent directory you want to have the pico sdk installed:
 
-```
+```bash
 $ mkdir pico
 $ cd pico/
 $ git clone https://github.com/raspberrypi/pico-sdk.git --branch master
@@ -22,7 +22,7 @@ $ git submodule update --init
 
 For ease of developement from now on you may want to export the environment variable `PICO_SDK_PATH` (or else you need to add it manually when compiling with `-DPICO_SDK_PATH=...`):
 
-```
+```bash
 $ export PICO_SDK_PATH=<path>/pico-sdk
 ```
 
@@ -30,14 +30,14 @@ Step 2: **installing the toolchain**
 
 Launch:
 
-```
+```bash
 $ sudo apt update
 $ sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential
 ```
 
 If you are in Ubuntu or Debian you may also need to run:
 
-```
+```bash
 $ sudo apt install g++ libstdc++-arm-none-eabi-newlib
 ```
 
@@ -51,7 +51,7 @@ We can simply clone the [official repository](https://github.com/raspberrypi/pic
 
 **NB:** Remember to have `PICO_SDK_PATH` enabled.
 
-```
+```bash
 $ git clone https://github.com/raspberrypi/picotool.git
 $ cd picotool
 $ mkdir build
@@ -62,7 +62,7 @@ $ make install
 
 Then we can export the environment variable:
 
-```
+```bash
 $ export picotool_DIR=<path>/picotool
 ```
 
@@ -74,8 +74,7 @@ The main structure of the repository is taken from the [official examples](https
 
 To compile the project we can do:
 
-```
-$ cd RP2040
+```bash
 $ mkdir build
 $ cd build
 $ cmake .. -DPICO_BOARD=arduino_nano_rp2040_connect
@@ -92,16 +91,45 @@ And in the `build/OnEitherCore` we should see the **.uf2** files which can be de
 
 ## HOWTO NAVIGATE THE DIRECTORIES
 
-The [RP2040/CMakeLists.txt](./RP2040/CMakeLists.txt) file decides which of the subdirectories to compile. 
+The [CMakeLists.txt](./CMakeLists.txt) file decides which of the subdirectories to compile. 
 
 For the moment the choice is manual, but can be improved by using environment variables (TODO).
 
-The main test resides in [TestSemaphores](./RP2040/TestSemaphores/).
+The main test resides in [TestSemaphores](./TestSemaphores/).
 
-The directory is composed of a cmake file which imports all the necessary files found in [include](./RP2040/include/).
+The directory is composed of a cmake file which imports all the necessary files found in [include](./include/).
 
 These files are both cmake commands to find the FreeRTOS kernel (if not specified manually) and FreeRTOS configuration files.
 
-The real library is implemented in [LibraryFreeRTOS_RP2040.h](./RP2040/include/LibraryFreeRTOS_RP2040.h), which is extensively commented.
+The real library is implemented in [LibraryFreeRTOS_RP2040.h](./include/LibraryFreeRTOS_RP2040.h), which is extensively commented.
+
+## EXAMPLE USAGE
+
+The library is very simple to use. Indeed in your `main.c` file you can create your function and then call the library by using two primitives:
+
+* `create_test_pipeline_function()`: to be called outside of your main function. It is responsible for setting up the tasks which will run the test on both cores.
+* `start_test_pipeline()`: called in the main function. It is resposible for creating the master task which will orchestrate the execution of the two slaves.
+
+```c
+#include "LibraryFreeRTOS_RP2040.h"
+
+uint32_t addition(uint32_t num1, uint32_t num2){
+    return num1+num2;
+}
+
+create_test_pipeline_function(test_add, uint32_t, "%ld", addition, 10, 5);
+
+int main(){
+
+    // Setup the SDK and the relative IO.
+    start_hw();
+
+    start_test_pipeline(test_add);
+
+    // Launch the scheduler.
+    start_FreeRTOS();
+
+}
+```
 
 #
