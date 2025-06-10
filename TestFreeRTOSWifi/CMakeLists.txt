@@ -22,9 +22,6 @@ target_include_directories(picow_test_wifi_freertos PRIVATE
         ${PROJECT_INCLUDE_DIR}
         )
 
-# Pull in FreeRTOS
-include(${PROJECT_INCLUDE_DIR}/FreeRTOS_Kernel_import.cmake)
-
 target_link_libraries(picow_test_wifi_freertos
         pico_cyw43_arch_lwip_threadsafe_background
         FreeRTOS-Kernel

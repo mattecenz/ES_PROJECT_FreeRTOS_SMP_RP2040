@@ -12,9 +12,6 @@ target_include_directories(test_semaphore_common INTERFACE
         ${PROJECT_INCLUDE_DIR}
         )
 
-# Pull in FreeRTOS
-include(${PROJECT_INCLUDE_DIR}/FreeRTOS_Kernel_import.cmake)
-
 target_link_libraries(test_semaphore_common INTERFACE
         FreeRTOS-Kernel
         FreeRTOS-Kernel-Heap1

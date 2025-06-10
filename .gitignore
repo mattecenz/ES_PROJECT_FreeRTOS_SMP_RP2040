@@ -1,2 +1,2 @@
-RP2040/build/*
+./build/*
 .vscode/*

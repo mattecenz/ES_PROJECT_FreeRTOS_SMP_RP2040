@@ -8,11 +8,12 @@ include(pico_sdk_import.cmake)
 
 include(pico_extras_import_optional.cmake)
 
+# Pull in FreeRTOS
+include(FreeRTOS_Kernel_import.cmake)
+
 PROJECT(example C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
-
-#add_subdirectory(OnEitherCore)
 
 add_subdirectory(TestSemaphores)
 add_subdirectory(TestSemaphoresSingleExec)
