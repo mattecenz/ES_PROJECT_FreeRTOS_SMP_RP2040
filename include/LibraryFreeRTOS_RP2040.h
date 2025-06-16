@@ -36,6 +36,17 @@ Authors:
 #include "pico/multicore.h"
 
 // ------------------------------------------------------------------------ //
+//  UTILITIES FUNCTIONS                                                     //
+// ------------------------------------------------------------------------ //
+
+/*
+    Function used to return true when no return values are expected.
+*/
+static bool return_true(void*a, void*b){
+    return true;
+}
+
+// ------------------------------------------------------------------------ //
 //  UTILITIES MACROS                                                        //
 // ------------------------------------------------------------------------ //
 
@@ -151,19 +162,27 @@ vTaskCoreAffinitySet(return_handle, (1 << n));                                  
         - conversion_char   : identifier to convert the result of the function in a string.
         - return_val_0      : name of the variable where the result of the core 0 is stored.
         - return_val_1      : name of the variable where the result of the core 1 is stored.
+        - check_function    : function used to check the results of the two cores.
 
     The master is designated to create the tasks to be launched on each core,
     and it waits for their completion to collect and print their results.
 */
 
-#define create_master_function(test_name, conversion_char, return_val_0, return_val_1)                  \
+#define create_master_function(test_name, conversion_char, return_val_0, return_val_1, check_function)                  \
 static void vMasterFunction_##test_name() {                                                             \
-    TaskHandle_t vSlaveFunctionHandle0_##test_name = NULL;                                              \
-    TaskHandle_t vSlaveFunctionHandle1_##test_name = NULL;                                              \
-    create_slave_task_on_core(0, vSlaveFunction_##test_name##0, vSlaveFunctionHandle0_##test_name)      \
-    create_slave_task_on_core(1, vSlaveFunction_##test_name##1, vSlaveFunctionHandle1_##test_name)      \
-    for (int i = 0; i < 2; i++) {                                                                       \
-        ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
+    bool check_result = false;                                                                          \
+    while(!check_result){                                                                               \
+        TaskHandle_t vSlaveFunctionHandle0_##test_name = NULL;                                          \
+        TaskHandle_t vSlaveFunctionHandle1_##test_name = NULL;                                          \
+        create_slave_task_on_core(0, vSlaveFunction_##test_name##0, vSlaveFunctionHandle0_##test_name)  \
+        create_slave_task_on_core(1, vSlaveFunction_##test_name##1, vSlaveFunctionHandle1_##test_name)  \
+        for (int i = 0; i < 2; i++) {                                                                   \
+            ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                   \
+        }                                                                                               \
+        check_result = check_function(return_val_0, return_val_1);                                      \
+        if(!check_result){                                                                              \
+            printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                    \
+        }                                                                                               \
     }                                                                                                   \
     printf(STRING(test_name)" has ended correctly!\n");                                                 \
     printf(STRING(test_name)"> return_core_0:\t" conversion_char"\n", return_val_0);                    \
@@ -212,6 +231,7 @@ void start_FreeRTOS(){
         - return_type       : return value of the function.
         - conversion_char   : identifier to convert the result of the function in a string (e.g. int32_t -> "%d").
         - function_name     : name of the function to be called.
+        - check_function    : function used to check the results of the two cores.
         - ...               : arguments passed as inputs to the function.
 
     It creates 3 tasks specified in this way:
@@ -226,12 +246,12 @@ void start_FreeRTOS(){
 
  */
 
-#define create_test_pipeline_function(test_name, return_type, conversion_char, function_name, ...)          \
+#define create_test_pipeline_function(test_name, return_type, conversion_char, function_name, check_function, ...)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
 create_return_struct(test_name, return_type)                                                                \
 create_slave_function(test_name, 0, return_type, function_name, __VA_ARGS__)                                \
 create_slave_function(test_name, 1, return_type, function_name, __VA_ARGS__)                                \
-create_master_function(test_name, conversion_char, return_info_##test_name.return_core_0, return_info_##test_name.return_core_1)    \
+create_master_function(test_name, conversion_char, return_info_##test_name.return_core_0, return_info_##test_name.return_core_1, check_function)    \
 
 /**
     Macro which creates the testing pipeline for void functions.
@@ -255,7 +275,7 @@ static TaskHandle_t masterTaskHandle_##test_name = NULL;                        
 create_return_struct(test_name, return_type)                                                    \
 create_slave_void_function(test_name, 0, function_name_core1)                                   \
 create_slave_void_function(test_name, 1, function_name_core2)                                   \
-create_master_function(test_name, conversion_char, return_name, return_name)                    \
+create_master_function(test_name, conversion_char, return_name, return_name, return_true)                    \
 
 /**
     Method which creates the master task assigned to a specific test name.
