@@ -53,14 +53,12 @@ Authors:
     deployed on each core and their respective timings.
 */
 
-#define create_return_struct(test_name, return_type)                            \
-struct struct_return_info_##test_name{                                          \
-    return_type return_core_0;                                                  \
-    return_type return_core_1;                                                  \
-    uint64_t    return_time_0;                                                  \
-    uint64_t    return_time_1;                                                  \
-};                                                                              \
-static struct struct_return_info_##test_name return_info_##test_name;           \
+#define create_return_struct(test_name, return_type)                                                        \
+struct struct_return_info_##test_name{                                                                      \
+    return_type return_value;                                                                               \
+    uint64_t    return_time;                                                                                \
+};                                                                                                          \
+static struct struct_return_info_##test_name return_info_##test_name[RP2040config_testRUN_ON_CORES];        \
 
 /*
     Macro used to store in an internal variable the time read 
@@ -78,29 +76,6 @@ absolute_time_t saved_time = get_absolute_time()        \
 
 #define calc_time_diff()                                \
 absolute_time_diff_us(saved_time,get_absolute_time())   \
-
-/*
-    Macro used for creating the function wrapper which runs on a specific core.
-
-    Arguments:
-        - test_name     : unique identifier of the test name
-        - n             : designated core.
-        - return_type   : return value of the function (specified by the dev).
-        - function_name : name of the function to be called (specified by the dev).
-        - ...           : arguments passed as inputs to the function (specified by the dev).
-
-    The task executes the function and stores 
-    both the output value and the time taken to run it.
-*/
-
-#define create_slave_function(test_name, n, return_type, function_name, ...)        \
-static void vSlaveFunction_##test_name##n(){                                        \
-    save_time_now();                                                                \
-    return_info_##test_name.return_core_##n=function_name(__VA_ARGS__);             \
-    return_info_##test_name.return_time_##n=calc_time_diff();                       \
-    xTaskNotifyGive(masterTaskHandle_##test_name);                                  \
-    vTaskDelete(NULL);                                                              \
-}                                                                                   \
 
 /*
     Macro used for creating a wrapper for a void function to be launched on a specific core.
@@ -124,61 +99,51 @@ static void vSlaveFunction_##test_name##n(){                                \
 }                                                                           \
 
 /*
-    Macro used to wrap the FreeRTOS function used for creating tasks, 
-    and assign the task to a specific core.
-
-    Arguments:
-        - n             : designated core.
-        - task_name     : unique identifier used to recognize the task.
-        - return_handle : TaskHandle_t object used to store the information about the task.
-
-    The priorities of the tasks and the task size are taken by the Config file defined by the user.
-*/
-
-#define create_slave_task_on_core(n, task_name, return_handle)                      \
-xTaskCreate(task_name,                                                              \
-    STRING(task_name),                                                              \
-    RP2040config_tskSLAVE_STACK_SIZE##n,                                            \
-    NULL,                                                                           \
-    RP2040config_tskSLAVE_PRIORITY##n,                                              \
-    &return_handle);                                                                \
-vTaskCoreAffinitySet(return_handle, (1 << n));                                      \
-
-/*
     Macro used to create the function associated to the master task.
 
     Arguments:
         - test_name         : unique identifier of the test name
         - conversion_char   : identifier to convert the result of the function in a string.
-        - return_val_0      : name of the variable where the result of the core 0 is stored.
-        - return_val_1      : name of the variable where the result of the core 1 is stored.
+        - return_variable   : name of the variable where the results of the test are stored
         - check_function    : function used to check the results of the two cores.
 
     The master is designated to create the tasks to be launched on each core,
     and it waits for their completion to collect and print their results.
 */
 
-#define create_master_function(test_name, conversion_char, return_val_0, return_val_1, check_function)                  \
+#define create_master_function(test_name, conversion_char, return_variable, check_function)             \
 static void vMasterFunction_##test_name() {                                                             \
     bool check_result = false;                                                                          \
     while(!check_result){                                                                               \
-        TaskHandle_t vSlaveFunctionHandle0_##test_name = NULL;                                          \
-        TaskHandle_t vSlaveFunctionHandle1_##test_name = NULL;                                          \
-        create_slave_task_on_core(0, vSlaveFunction_##test_name##0, vSlaveFunctionHandle0_##test_name)  \
-        create_slave_task_on_core(1, vSlaveFunction_##test_name##1, vSlaveFunctionHandle1_##test_name)  \
-        for (int i = 0; i < 2; i++) {                                                                   \
+        TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                              \
+        for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                              \
+            xTaskCreate(vSlaveFunction_##test_name,                                                     \
+                STRING(vSlaveFunction_##test_name)STRING(n),                                            \
+                RP2040config_tskSLAVE_STACK_SIZE,                                                       \
+                &return_variable[i],                                                                    \
+                RP2040config_tskSLAVE_PRIORITY,                                                         \
+                &vSlaveFunctionHandles[i]);                                                             \
+            vTaskCoreAffinitySet(vSlaveFunctionHandles[i], (1 << i));                                   \
+        }                                                                                               \
+        for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                         \
             ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                   \
         }                                                                                               \
-        check_result = check_function(return_val_0, return_val_1);                                      \
+        check_result = check_function(                                                                  \
+            return_variable[0].return_value,                                                            \
+            return_variable[1].return_value);                                                           \
         if(!check_result){                                                                              \
             printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                    \
         }                                                                                               \
     }                                                                                                   \
     printf(STRING(test_name)" has ended correctly!\n");                                                 \
-    printf(STRING(test_name)"> return_core_0:\t" conversion_char"\n", return_val_0);                    \
-    printf(STRING(test_name)"> return_core_1:\t" conversion_char"\n", return_val_1);                    \
-    printf(STRING(test_name)"> return_time_0:\t %llu \n", return_info_##test_name.return_time_0);       \
-    printf(STRING(test_name)"> return_time_1:\t %llu \n", return_info_##test_name.return_time_1);       \
+    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
+        printf(                                                                                         \
+            STRING(test_name)"> return_core_%d:\t" conversion_char"\n",                                 \
+            i,  return_variable[i].return_value);                                                       \
+        printf(                                                                                         \
+            STRING(test_name)"> return_time_%d:\t %llu \n",                                             \
+            i,  return_variable[i].return_time);                                                        \
+    }                                                                                                   \
     vTaskDelete(NULL);                                                                                  \
 }                                                                                                       \
 
@@ -234,9 +199,9 @@ void start_FreeRTOS(){
         - check_function    : function used to check the results of the two cores.
         - ...               : arguments passed as inputs to the function.
 
-    It creates 3 tasks specified in this way:
+    It creates RP2040config_testRUN_ON_CORES + 1 tasks specified in this way:
 
-    2 slave tasks, to be submitted one per core. 
+    RP2040config_testRUN_ON_CORES slave tasks, to be submitted one per core. 
     The slave tasks call the function specified in the input of the macro.
 
     1 master task, which creates the two slaves, assigns and schedules them.
@@ -249,9 +214,16 @@ void start_FreeRTOS(){
 #define create_test_pipeline_function(test_name, return_type, conversion_char, function_name, check_function, ...)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
 create_return_struct(test_name, return_type)                                                                \
-create_slave_function(test_name, 0, return_type, function_name, __VA_ARGS__)                                \
-create_slave_function(test_name, 1, return_type, function_name, __VA_ARGS__)                                \
-create_master_function(test_name, conversion_char, return_info_##test_name.return_core_0, return_info_##test_name.return_core_1, check_function)    \
+                                                                                                            \
+static void vSlaveFunction_##test_name(void *pvParameters){                                                 \
+    save_time_now();                                                                                        \
+    ((struct struct_return_info_##test_name *) pvParameters)->return_value=function_name(__VA_ARGS__);      \
+    ((struct struct_return_info_##test_name *) pvParameters)->return_time=calc_time_diff();                 \
+    xTaskNotifyGive(masterTaskHandle_##test_name);                                                          \
+    vTaskDelete(NULL);                                                                                      \
+}                                                                                                           \
+                                                                                                            \
+create_master_function(test_name, conversion_char, return_info_##test_name, check_function)                 \
 
 /**
     Macro which creates the testing pipeline for void functions.

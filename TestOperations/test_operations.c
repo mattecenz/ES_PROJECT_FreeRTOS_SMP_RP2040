@@ -28,11 +28,12 @@ static bool check_equals(type_t return_core_0, type_t return_core_1) {
 }
 
 #pragma GCC pop_options
+
 create_test_pipeline_function(test_addition, 
     type_t, 
     "%ld", 
     addition,
-    check_equals,
+    DEFAULT_CHECK,
     10,
     3)
 
@@ -56,7 +57,7 @@ create_test_pipeline_function(test_division,
     type_t, 
     "%ld", 
     division,
-    check_equals,
+    DEFAULT_CHECK,
     10,
     3)
 

@@ -15,8 +15,8 @@ PROJECT(example C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-add_subdirectory(TestSemaphores)
-add_subdirectory(TestSemaphoresSingleExec)
+#add_subdirectory(TestSemaphores)
+#add_subdirectory(TestSemaphoresSingleExec)
 add_subdirectory(TestOperations)
 
 #add_subdirectory(TestFreeRTOSWifi)
