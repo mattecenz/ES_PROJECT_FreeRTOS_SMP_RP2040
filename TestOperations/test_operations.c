@@ -40,7 +40,7 @@ create_test_pipeline_function(test_subtraction,
     type_t, 
     "%ld", 
     subtraction,
-    check_equals,
+    DEFAULT_CHECK,
     10,
     3)
 
@@ -48,7 +48,7 @@ create_test_pipeline_function(test_multiplication,
     type_t, 
     "%ld", 
     multiplication,
-    check_equals,
+    DEFAULT_CHECK,
     10,
     3)
 

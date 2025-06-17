@@ -35,16 +35,6 @@ Authors:
 #include "hardware/timer.h"
 #include "pico/multicore.h"
 
-// ------------------------------------------------------------------------ //
-//  UTILITIES FUNCTIONS                                                     //
-// ------------------------------------------------------------------------ //
-
-/*
-    Function used to return true when no return values are expected.
-*/
-static bool return_true(void*a, void*b){
-    return true;
-}
 
 // ------------------------------------------------------------------------ //
 //  UTILITIES MACROS                                                        //
@@ -192,6 +182,16 @@ static void vMasterFunction_##test_name() {                                     
     vTaskDelete(NULL);                                                                                  \
 }                                                                                                       \
 
+/*
+    Macro used to define the default behavior of the master function
+    when the check_function is not cutomized.
+
+    It simply returns the negated XOR of the two return values (so if they are the same).
+*/
+
+#define DEFAULT_CHECK(return_val_0, return_val_1) \
+    !(return_val_0 ^ return_val_1)                 \
+
 // ------------------------------------------------------------------------ //
 //  PUBLIC INTERFACE                                                        //
 // ------------------------------------------------------------------------ //
@@ -275,7 +275,7 @@ static TaskHandle_t masterTaskHandle_##test_name = NULL;                        
 create_return_struct(test_name, return_type)                                                    \
 create_slave_void_function(test_name, 0, function_name_core1)                                   \
 create_slave_void_function(test_name, 1, function_name_core2)                                   \
-create_master_function(test_name, conversion_char, return_name, return_name, return_true)                    \
+create_master_function(test_name, conversion_char, return_name, return_name, DEFAULT_CHECK)                    \
 
 /**
     Method which creates the master task assigned to a specific test name.
