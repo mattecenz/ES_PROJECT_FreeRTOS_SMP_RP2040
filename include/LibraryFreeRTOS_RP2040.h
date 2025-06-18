@@ -128,9 +128,7 @@ static void vMasterFunction_##test_name() {                                     
         for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                         \
             ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                   \
         }                                                                                               \
-        check_result = check_function(                                                                  \
-            return_variable[0].return_value,                                                            \
-            return_variable[1].return_value);                                                           \
+        CHECK_GENERATION(check_function, return_variable)                                               \
         if(!check_result){                                                                              \
             printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                    \
         }                                                                                               \
@@ -146,6 +144,28 @@ static void vMasterFunction_##test_name() {                                     
     }                                                                                                   \
     vTaskDelete(NULL);                                                                                  \
 }                                                                                                       \
+
+/*
+    Macro used to check the results of the cores.
+
+    It is called after all the tasks have been created and executed.
+    The function passed is used to check all values are equal by pair.
+
+    Arguments:
+        - check_function : function used to check the results of the cores.
+*/
+
+#define CHECK_GENERATION(check_function, variables)                                                     \
+    bool equal = true;                                                                                  \
+    for(int i=0; i<RP2040config_testRUN_ON_CORES-1; i++){                                               \
+        if(!check_function(variables[i].return_value, variables[i+1].return_value)){                    \
+            equal = false;                                                                              \
+            break;                                                                                      \
+        }                                                                                               \
+    }                                                                                                   \
+    check_result = equal;                                                                               \
+
+
 
 /*
     Macro used to define the default behavior of the master function

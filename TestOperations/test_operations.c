@@ -33,7 +33,7 @@ create_test_pipeline_function(test_addition,
     type_t, 
     "%ld", 
     addition,
-    DEFAULT_CHECK,
+    check_equals,
     10,
     3)
 
@@ -49,7 +49,7 @@ create_test_pipeline_function(test_multiplication,
     type_t, 
     "%ld", 
     multiplication,
-    DEFAULT_CHECK,
+    check_equals,
     10,
     3)
 
