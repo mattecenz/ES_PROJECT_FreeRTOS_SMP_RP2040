@@ -254,16 +254,16 @@ static void vMasterFunction_##test_name() {                                     
         - test_name             : unique identifier of the test name
         - return_type           : return value of the function.
         - conversion_char       : identifier to convert the result of the function in a string (e.g. int32_t -> "%d").
+        - check_function        : name of the function used for error checking.
         - return_name           : name of the shared variable accessed by the void functions.
-        - function_name_core0   : name of the function to be deployed on core 0.
-        - function_name_core1   : name of the function to be deployed on core 1.
+        - ...                   : name of the functions launched (one per core).
 
     It has the same structure as "create_test_pipeline_function",
     but it is adapted for working with void functions.
 
  */
 
-#define create_test_pipeline_void_functions(test_name, return_type, conversion_char, return_name, check_function, ...)     \
+#define create_test_pipeline_void_functions(test_name, return_type, conversion_char, check_function, return_name, ...)     \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
                                                                                                             \
 struct return_info_##test_name{                                                                             \

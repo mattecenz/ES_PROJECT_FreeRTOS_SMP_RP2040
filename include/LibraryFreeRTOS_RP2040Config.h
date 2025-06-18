@@ -2,6 +2,8 @@
 
 Template for configuration of the FreeRTOS library for RP2040.
 
+If needed it can be moved (and copied) inside each test independently.
+
 Authors:
 
 - Matteo Briscini

@@ -65,24 +65,24 @@ static void shared_subtraction_sdk_lock(){
 create_test_pipeline_void_functions(test_nolock, 
     type_t, 
     "%ld", 
-    shared_variable_nolock, 
     DEFAULT_CHECK,
+    shared_variable_nolock, 
     shared_addition_nolock, 
     shared_subtraction_nolock)
 
 create_test_pipeline_void_functions(test_freertos_lock, 
     type_t, 
     "%ld", 
-    shared_variable_freertos_lock, 
     DEFAULT_CHECK,
+    shared_variable_freertos_lock, 
     shared_addition_freertos_lock, 
     shared_subtraction_freertos_lock)
 
 create_test_pipeline_void_functions(test_sdk_lock, 
     type_t, 
     "%ld", 
-    shared_variable_sdk_lock, 
     DEFAULT_CHECK,
+    shared_variable_sdk_lock, 
     shared_addition_sdk_lock, 
     shared_subtraction_sdk_lock)
 
