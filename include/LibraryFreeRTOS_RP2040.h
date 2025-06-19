@@ -64,6 +64,8 @@ absolute_time_t saved_time = get_absolute_time()        \
 absolute_time_diff_us(saved_time,get_absolute_time())   \
 
 /*
+    (NOT USED)
+
     Macro used to create the function associated to the master task.
 
     Arguments:
@@ -192,7 +194,9 @@ void start_FreeRTOS(){
     1 master task, which creates the two slaves, assigns and schedules them.
     Then it will pause until both tasks are finished and it prints the result on the serial port.
 
-    For the moment it is assumed that the type returned by the task for the moment is a simple type.
+    For the moment it is assumed that the type returned by the task is a simple type.
+
+    At the end all the values produced by each core will be compared, expecting them to be all equal. 
 
  */
 
@@ -256,14 +260,20 @@ static void vMasterFunction_##test_name() {                                     
         - conversion_char       : identifier to convert the result of the function in a string (e.g. int32_t -> "%d").
         - check_function        : name of the function used for error checking.
         - return_name           : name of the shared variable accessed by the void functions.
+        - expected_value        : constexpr containing the expected value of return_name at the end of the execution.
         - ...                   : name of the functions launched (one per core).
 
-    It has the same structure as "create_test_pipeline_function",
-    but it is adapted for working with void functions.
+    It has the same structure as "create_test_pipeline_function", but it is adapted for working with void functions.
 
+    Indeed for each core you submit a function having the prototype:
+        void fnc();
+
+    With the assumptions that it will modify the shared variable stored in return_name.
+
+    At the end the value in return_name will be compared with the value contained in expected_value, using the check_function.
  */
 
-#define create_test_pipeline_void_functions(test_name, return_type, conversion_char, check_function, return_name, ...)     \
+#define create_test_pipeline_void_functions(test_name, return_type, conversion_char, check_function, expected_value, return_name, ...)     \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
                                                                                                             \
 struct return_info_##test_name{                                                                             \
@@ -283,30 +293,27 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
 }                                                                                                           \
                                                                                                             \
 static void vMasterFunction_##test_name() {                                                                 \
-    bool check_result = false;                                                                              \
     void(*ptrs[RP2040config_testRUN_ON_CORES])() = { __VA_ARGS__ };                                         \
     for (unsigned int i = 0; i < sizeof ptrs / sizeof ptrs[0]; i++)                                         \
-        return_info_##test_name[i].fn_ptr=ptrs[i];                                                          \
-    while(!check_result){                                                                                   \
-        TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                  \
-        for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
-            xTaskCreate(vSlaveFunction_##test_name,                                                         \
-                STRING(vSlaveFunction_##test_name)STRING(n),                                                \
-                RP2040config_tskSLAVE_STACK_SIZE,                                                           \
-                &return_info_##test_name[i],                                                                \
-                RP2040config_tskSLAVE_PRIORITY,                                                             \
-                &vSlaveFunctionHandles[i]);                                                                 \
-            vTaskCoreAffinitySet(vSlaveFunctionHandles[i], (1 << i));                                       \
-        }                                                                                                   \
-        for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
-            ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
-        }                                                                                                   \
-        CHECK_GENERATION(check_function, return_info_##test_name)                                           \
-        if(!check_result){                                                                                  \
-            printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                        \
-        }                                                                                                   \
+    return_info_##test_name[i].fn_ptr=ptrs[i];                                                              \
+    TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                      \
+    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
+        xTaskCreate(vSlaveFunction_##test_name,                                                             \
+            STRING(vSlaveFunction_##test_name)STRING(n),                                                    \
+            RP2040config_tskSLAVE_STACK_SIZE,                                                               \
+            &return_info_##test_name[i],                                                                    \
+            RP2040config_tskSLAVE_PRIORITY,                                                                 \
+            &vSlaveFunctionHandles[i]);                                                                     \
+        vTaskCoreAffinitySet(vSlaveFunctionHandles[i], (1 << i));                                           \
     }                                                                                                       \
-    printf(STRING(test_name)" has ended correctly!\n");                                                     \
+    for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                                 \
+        ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                           \
+    }                                                                                                       \
+    bool check_result=check_function(return_name, expected_value);                                          \
+    if(!check_result){                                                                                      \
+        printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                            \
+    }                                                                                                       \
+    printf(STRING(test_name)" has ended!\n");                                                               \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         printf(                                                                                             \
             STRING(test_name)"> return_core_%d:\t" conversion_char"\n",                                     \
