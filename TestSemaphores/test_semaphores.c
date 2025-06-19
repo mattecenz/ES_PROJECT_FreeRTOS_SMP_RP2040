@@ -59,7 +59,7 @@ create_test_pipeline_void_functions(test_ts,
     "%ld", 
     DEFAULT_CHECK, 
     0,
-    shared_variable
+    shared_variable,
     shared_addition, 
     shared_subtraction)
 
