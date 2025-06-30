@@ -1,6 +1,6 @@
 # ES PROJECT FreeRTOS SMP RP2040
 
-**TODO:** add description.
+We provide a simple library in order to deploy functions on multiple cores in the [Arduino Nano RP2040 connect](https://docs.arduino.cc/hardware/nano-rp2040-connect/) board.
 
 ## SETUP PROJECT FROM ZERO
 
