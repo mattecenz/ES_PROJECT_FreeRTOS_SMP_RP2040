@@ -4,9 +4,9 @@ We provide a simple library in order to deploy functions on multiple cores in th
 
 ## SETUP PROJECT FROM ZERO
 
-**NB:** tested only in *Ubuntu* for the moment.
+**NB:** tested only on *Ubuntu* for the moment.
 
-Step 1: **install the sdk for working with the Raspberry Pico**
+### Install the sdk for working with the Raspberry Pico
 
 Instructions taken from [this](https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf) document in the Appendix C.
 
@@ -25,8 +25,8 @@ For ease of developement from now on you may want to export the environment vari
 ```bash
 $ export PICO_SDK_PATH=<path>/pico-sdk
 ```
-
-Step 2: **installing the toolchain**
+ 
+### Installing the toolchain
 
 Launch:
 
@@ -35,13 +35,13 @@ $ sudo apt update
 $ sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential
 ```
 
-If you are in Ubuntu or Debian you may also need to run:
+If you are on Ubuntu or Debian you may also need to run:
 
 ```bash
 $ sudo apt install g++ libstdc++-arm-none-eabi-newlib
 ```
 
-Step 3: **installing picotool**
+### Installing picotool
 
 Picotool is a useful program which can help us with flashing the code directly on our board.
 
@@ -66,7 +66,7 @@ Then we can export the environment variable:
 $ export picotool_DIR=<path>/picotool
 ```
 
-Step 4: **compiling the project**
+### Compiling the project
 
 The main structure of the repository is taken from the [official examples](https://github.com/FreeRTOS/FreeRTOS-Community-Supported-Demos) on GitHub.
 
@@ -83,11 +83,7 @@ $ make
 
 **NB:** the flag `-DPICO_BOARD=arduino_nano_rp2040_connect` tells the sdk for which board the project needs to be compiled.
 
-**NB:** I needed to slightly change the cmake found on the repository, as it seems that the version I downloaded had some warnings which were not suppressed.
-
-And in the `build/OnEitherCore` we should see the **.uf2** files which can be deployed in the board.
-
-**NB:** if the test with the wifi module has to be compiled, the correct pico board is `-DPICO_BOARD=pico_w`.
+And in the `build/TestSemaphores` we should see the **.uf2** files which can be deployed in the board.
 
 ## HOWTO NAVIGATE THE DIRECTORIES
 
@@ -95,7 +91,7 @@ The [CMakeLists.txt](./CMakeLists.txt) file decides which of the subdirectories 
 
 For the moment the choice is manual, but can be improved by using environment variables (TODO).
 
-The main test resides in [TestSemaphores](./TestSemaphores/).
+The main test resides in [TestSemaphores](./TestSemaphores/) and [TestOperations](./TestOperations/).
 
 The directory is composed of a cmake file which imports all the necessary files found in [include](./include/).
 
@@ -105,7 +101,7 @@ The real library is implemented in [LibraryFreeRTOS_RP2040.h](./include/LibraryF
 
 ## EXAMPLE USAGE
 
-The library is very simple to use. Indeed in your `main.c` file you can create your function and then call the library by using two primitives:
+The library is very simple to use.In your `main.c` file you can create your function and then call the library by using two primitives:
 
 * `create_test_pipeline_function()`: to be called outside of your main function. It is responsible for setting up the tasks which will run the test on both cores.
 * `start_test_pipeline()`: called in the main function. It is resposible for creating the master task which will orchestrate the execution of the two slaves.
