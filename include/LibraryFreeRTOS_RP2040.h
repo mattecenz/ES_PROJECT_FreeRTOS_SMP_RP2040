@@ -295,7 +295,7 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
 static void vMasterFunction_##test_name() {                                                                 \
     void(*ptrs[RP2040config_testRUN_ON_CORES])() = { __VA_ARGS__ };                                         \
     for (unsigned int i = 0; i < sizeof ptrs / sizeof ptrs[0]; i++)                                         \
-    return_info_##test_name[i].fn_ptr=ptrs[i];                                                              \
+        return_info_##test_name[i].fn_ptr=ptrs[i];                                                          \
     TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                      \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         xTaskCreate(vSlaveFunction_##test_name,                                                             \

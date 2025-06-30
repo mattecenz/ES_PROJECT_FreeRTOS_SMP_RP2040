@@ -102,7 +102,7 @@ int main(void) {
 
     start_test_pipeline(test_nolock);
     start_test_pipeline(test_freertos_lock);
-    start_test_pipeline(test_sdk_lock)
+    start_test_pipeline(test_sdk_lock);
 
     start_FreeRTOS();
 }
