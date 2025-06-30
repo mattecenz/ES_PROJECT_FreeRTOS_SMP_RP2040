@@ -57,9 +57,9 @@ static void shared_subtraction(){
 create_test_pipeline_void_functions(test_ts, 
     type_t, 
     "%ld", 
-    DEFAULT_CHECK,
-    shared_variable, 
+    DEFAULT_CHECK, 
     0,
+    shared_variable,
     shared_addition, 
     shared_subtraction)
 
