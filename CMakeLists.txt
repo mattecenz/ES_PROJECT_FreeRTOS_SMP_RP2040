@@ -7,6 +7,9 @@ cmake_minimum_required(VERSION 3.13)
 include(pico_sdk_import.cmake)
 
 include(pico_extras_import_optional.cmake)
+# set constants
+
+add_compile_definitions(PICO_DEFAULT_LED_PIN=21) # Default LED pin for RP2040 Pico
 
 # Pull in FreeRTOS
 include(FreeRTOS_Kernel_import.cmake)
