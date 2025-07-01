@@ -1,22 +1,17 @@
 cmake_minimum_required(VERSION 3.13)
 
-# Pull in SDK (must be before project)
-include(pico_sdk_import.cmake)
-# Pull in FreeRTOS
-include(FreeRTOS_Kernel_import.cmake)
-
-project(example C CXX ASM)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+set(PROJECT_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/../include)
 
 pico_sdk_init()
 
 add_library(test_semaphore_common INTERFACE)
 target_sources(test_semaphore_common INTERFACE
-        main.c)
+        test_semaphores.c)
 target_include_directories(test_semaphore_common INTERFACE
         ${CMAKE_CURRENT_LIST_DIR}
+        ${PROJECT_INCLUDE_DIR}
         )
+
 target_link_libraries(test_semaphore_common INTERFACE
         FreeRTOS-Kernel
         FreeRTOS-Kernel-Heap1
@@ -38,10 +33,18 @@ target_link_libraries(test_semaphore_nonts test_semaphore_common)
 pico_add_extra_outputs(test_semaphore_nonts)
 pico_enable_stdio_usb(test_semaphore_nonts 1)
 
-add_executable(test_semaphore_ts)
-target_link_libraries(test_semaphore_ts test_semaphore_common)
-target_compile_definitions(test_semaphore_ts PRIVATE
-        THREAD_SAFE=1
+add_executable(test_semaphore_freertos_lock)
+target_link_libraries(test_semaphore_freertos_lock test_semaphore_common)
+target_compile_definitions(test_semaphore_freertos_lock PRIVATE
+        USE_FREERTOS_LOCK=1
 )
-pico_add_extra_outputs(test_semaphore_ts)
-pico_enable_stdio_usb(test_semaphore_ts 1)
+pico_add_extra_outputs(test_semaphore_freertos_lock)
+pico_enable_stdio_usb(test_semaphore_freertos_lock 1)
+
+add_executable(test_semaphore_sdk_lock)
+target_link_libraries(test_semaphore_sdk_lock test_semaphore_common)
+target_compile_definitions(test_semaphore_sdk_lock PRIVATE
+        USE_SDK_LOCK=1
+)
+pico_add_extra_outputs(test_semaphore_sdk_lock)
+pico_enable_stdio_usb(test_semaphore_sdk_lock 1)

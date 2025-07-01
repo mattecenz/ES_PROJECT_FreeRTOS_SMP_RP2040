@@ -4,56 +4,7 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <string.h>
-#include <time.h>
-
-#include "pico/stdlib.h"
-#include "pico/cyw43_arch.h"
-
-#include "lwip/pbuf.h"
-#include "lwip/tcp.h"
-
-#if !defined(TEST_TCP_SERVER_IP)
-#error TEST_TCP_SERVER_IP not defined
-#endif
-
-#define TCP_PORT 4242
-#define DEBUG_printf printf
-#define BUF_SIZE 2048
-
-#define TEST_ITERATIONS 10
-#define POLL_TIME_S 5
-
-#if 0
-static void dump_bytes(const uint8_t *bptr, uint32_t len) {
-    unsigned int i = 0;
-
-    printf("dump_bytes %d", len);
-    for (i = 0; i < len;) {
-        if ((i & 0x0f) == 0) {
-            printf("\n");
-        } else if ((i & 0x07) == 0) {
-            printf(" ");
-        }
-        printf("%02x ", bptr[i++]);
-    }
-    printf("\n");
-}
-#define DUMP_BYTES dump_bytes
-#else
-#define DUMP_BYTES(A,B)
-#endif
-
-typedef struct TCP_CLIENT_T_ {
-    struct tcp_pcb *tcp_pcb;
-    ip_addr_t remote_addr;
-    uint8_t buffer[BUF_SIZE];
-    int buffer_len;
-    int sent_len;
-    bool complete;
-    int run_count;
-    bool connected;
-} TCP_CLIENT_T;
+#include "picow_tcp_client.h"
 
 static err_t tcp_client_close(void *arg) {
     TCP_CLIENT_T *state = (TCP_CLIENT_T*)arg;
@@ -232,25 +183,4 @@ void run_tcp_client_test(void) {
 #endif
     }
     free(state);
-}
-
-int main() {
-    stdio_init_all();
-
-    if (cyw43_arch_init()) {
-        DEBUG_printf("failed to initialise\n");
-        return 1;
-    }
-    cyw43_arch_enable_sta_mode();
-
-    printf("Connecting to Wi-Fi...\n");
-    if (cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD, CYW43_AUTH_WPA2_AES_PSK, 30000)) {
-        printf("failed to connect.\n");
-        return 1;
-    } else {
-        printf("Connected.\n");
-    }
-    run_tcp_client_test();
-    cyw43_arch_deinit();
-    return 0;
 }

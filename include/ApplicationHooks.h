@@ -30,7 +30,7 @@ void vApplicationTickHook( void )
         NOTE: A semaphore is used for example purposes.  In a real application it
         might be preferable to use a direct to task notification,
         which will be faster and use less RAM. */
-        gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
+        //gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
         xSemaphoreGiveFromISR( xEventSemaphore, &xHigherPriorityTaskWoken );
         ulCount = 0UL;
     }

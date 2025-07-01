@@ -11,10 +11,15 @@ include(pico_extras_import_optional.cmake)
 
 add_compile_definitions(PICO_DEFAULT_LED_PIN=21) # Default LED pin for RP2040 Pico
 
-PROJECT(examples)
+# Pull in FreeRTOS
+include(FreeRTOS_Kernel_import.cmake)
 
-add_subdirectory(OnEitherCore)
+PROJECT(example C CXX ASM)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(TestSemaphores)
+add_subdirectory(TestSemaphoresSingleExec)
+add_subdirectory(TestOperations)
 
-add_subdirectory(picow_tcp_client)
+#add_subdirectory(TestFreeRTOSWifi)
