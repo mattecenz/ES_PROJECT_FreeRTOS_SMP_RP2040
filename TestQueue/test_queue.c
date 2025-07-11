@@ -7,7 +7,6 @@
 
 #define TEMPERATURE_QUEUE_LENGTH 100
 #define TEMPERATURE_GENERATION_PERIOD 1000
-#define MASTER_SLAVE_QUEUE_LENGTH 2 // since there are only 2 slaves it should be enough.
 #define MASTER_DELAY 500 // half of the period to popolate the temperature queue.
 
 // Define a shared queue and the relative lock between a generic task and the master.
@@ -27,15 +26,9 @@ void vTaskTemperatureGenerator(){
     }
 }
 
-// Define a shared queue where master and slave can communicate safely 
-// NB: it could be done at library level too, or the values could be passed as parameters too
-static QueueHandle_t master_slave_queue;
 
 // This function will be executed once at the start of the master.
 void vTaskMasterSetup(){
-    // Create the master slave queue
-    master_slave_queue = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(uint32_t));
-
     if(temperature_queue == NULL){
         // printf("Error during creation of master-slave queue\n");
         vTaskDelete(NULL);
@@ -53,33 +46,13 @@ void vTaskMasterLoop(){
 
     // Copy the data two times in the slave queue
     for(uint32_t i=0;i<2;++i){
-        if(xQueueSendToBack(master_slave_queue, (void*) &temp_read, 0)!=pdPASS){
-            // There should be always space in the queue if everything is synchronized well.
-            // printf("Errore sending temperature on master-slave queue from master. We should never arrive here");
-            vTaskDelete(NULL);
-            // Here we should also delete the slaves.
+            send_to_slave(tmp_read);
         }
     }
 
     // From here on the library will wake up the two slave tasks which will do their job
 }
 
-// This method will be called after the slaves have finished.
-// In our case it will pop the values from the queue and check if they are equal.
-bool vTaskMasterCheck(){
-    uint32_t temp_slaves[2];
-
-    for(int i=0;i<2;++i){
-        if(xQueueReceive(temperature_queue, &(temp_slaves[i]), 0) == errQUEUE_EMPTY){
-            // printf("Master error when reading the master-slave queue. We should never arrive here\n");
-            vTaskDelete(NULL);
-            // Here we should also delete the slaves.
-        }
-    }
-    
-    // Check equality
-    return temp_slaves[0]==temp_slaves[1];
-}
 
 // This function will be executed once at the start of the slave.
 // NB: Maybe it is not needed at all
@@ -89,37 +62,14 @@ void vTaskSlaveSetup(){
 
 // This function will be called every time the slave is woken up by the master.
 // The value will be rewritten into the shared queue.
-uint32_t vTaskSlaveLoop(){
-    // Read the data from the master-slave queue.
-    // Both of the tasks will read from the
-    uint32_t temp_read;
-
-    // In theory the queue should never be empty
-    if(xQueueReceive(temperature_queue, &temp_read, 0) == errQUEUE_EMPTY){
-        // printf("Slave error when reading the master-slave queue. Return an invalid value")
-        return -1;
-    }
+uint32_t vTaskSlaveLoop(uint_32_t temp_read){
 
     // Return the temperature in Celsius in the master-slave queue.
     temp_read=temp_read-273;
 
-    if(xQueueSendToBack(master_slave_queue, (void*) &temp_read, 0)!=pdPASS){
-        // There should be always space in the queue if everything is synchronized well.
-        // printf("Errore sending temperature on master-slave queue from slave. We should never arrive here");
-        return;
-    }
+    send_to_master(temp_read);
 }
 
-// Prototype of library call.
-// create_test_pipeline(test_temperature // name of the test
-//      vTaskMasterSetup,
-//      vTaskMasterLoop,
-//      vTaskMasterCheck,
-//      vTaskSlaveSetup,
-//      vTaskSlaveLoop,
-//      uint32_t, // type returned by the slave loop
-//      "%ld", // useful if we want to print the value
-//)
 
 int main(void) {
 
@@ -143,6 +93,17 @@ int main(void) {
         NULL,  // no params                                 
         tskIDLE_PRIORITY,        
         NULL);         
-
+    
+    create_test_pipeline(
+        test_temperature, // name of the test
+        vTaskMasterSetup,
+        vTaskMasterLoop,
+        DEFAULT_CHECK,
+        uint32_t, // type returned by the slave loop
+        vTaskSlaveSetup,
+        vTaskSlaveLoop,
+        uint32_t, // type returned by the master loop
+        "%ld" // useful if we want to print the value
+    );
     start_FreeRTOS();
 }

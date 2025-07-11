@@ -347,11 +347,12 @@ xTaskCreate(vMasterFunction_##test_name,    \
 
 #endif
 
+#define MASTER_SLAVE_QUEUE_LENGTH RP2040config_testRUN_ON_CORES
 
-#define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, SlaveSetup, SlaveLoop, type, print_tag)          \
+#define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, input_type, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
-static QueueHandle_t master_slave_queue_##test_name = NULL;                                                 \
-static QueueHandle_t slave_master_queue_##test_name = NULL;                                                  \
+static QueueHandle_t master_to_slave_queue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(input_type));\
+static QueueHandle_t slave_to_master_queue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(return_type));\
                                                                                                             \
 struct return_info_##test_name{                                                                             \
     return_type return_value;                                                                               \
@@ -360,9 +361,11 @@ static struct return_info_##test_name return_info_##test_name[RP2040config_testR
                                                                                                             \
 static void vSlaveFunction_##test_name(void *pvParameters){                                                 \
     bool should_continue=true;                                                                              \
+    input_type input;                                                                                       \
     SlaveSetup();                                                                                           \
     while(should_continue){                                                                                 \
-        SlaveLoop();                                                                                        \
+        while(xQueueReceive(master_to_slave_queue_##test_name, &input, portMAX_DELAY) == pdTRUE);           \
+        SlaveLoop(input);                                                                                   \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
     vTaskDelete(NULL);                                                                                      \
@@ -370,10 +373,10 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
                                                                                                             \
 
 static void vMasterFunction_##test_name() {                                                                 \
-    
-    MasterSetup();                                                                                          \
     bool should_continue=true;                                                                              \
+    bool check_result = false;                                                                              \
     TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                      \
+    MasterSetup();                                                                                          \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         xTaskCreate(vSlaveFunction_##test_name,                                                             \
             STRING(vSlaveFunction_##test_name)STRING(n),                                                    \
@@ -388,18 +391,26 @@ static void vMasterFunction_##test_name() {                                     
         for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
             ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
         }                                                                                                   \
-        bool check_result=check_function(return_name, expected_value);                                      \
+        for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
+            xQueueReceive(slave_to_master_queue_##test_name, &return_info_##test_name[i], portMAX_DELAY);   \
+        }                                                                                                   \
+        CHECK_GENERATION(check_function, return_info_##test_name)                                           \
         if(!check_result){                                                                                  \
             printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                        \
         }                                                                                                   \
         for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
         printf(                                                                                             \
-            STRING(test_name)"> return_value_%d:\t" conversion_char"\n",                                     \
+            STRING(test_name)"> return_core_%d:\t" conversion_char"\n",                                     \
             i,  return_info_##test_name[i].return_value);                                                   \
-        printf(                                                                                             \
-            STRING(test_name)"> return_time_%d:\t %llu \n",                                                 \
-            i,  return_info_##test_name[i].return_time);                                                    \
         }                                                                                                   \
     }                                                                                                       \
+    #Free Queues, notify task to terminate, and delete the task.                                            \
     vTaskDelete(NULL);                                                                                      \
-}        
+}                                                                                                           \
+static void send_to_slave(input_type input) {   #cannot generalize with test_name                           \
+    xQueueSend(master_to_slave_queue_##test_name, &input, portMAX_DELAY);                                   \
+}                                                                                                           \
+static void send_to_master(return_type output) {                                                            \
+    xQueueSend(slave_to_master_queue_##test_name, &output, portMAX_DELAY);                                  \
+}                                                                                                           \
+
