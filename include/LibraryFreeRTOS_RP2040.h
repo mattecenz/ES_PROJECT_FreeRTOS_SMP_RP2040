@@ -346,3 +346,62 @@ xTaskCreate(vMasterFunction_##test_name,    \
     &masterTaskHandle_##test_name);         \
 
 #endif
+
+
+#define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, SlaveSetup, SlaveLoop, type, print_tag)          \
+static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
+static QueueHandle_t master_slave_queue_##test_name = NULL;                                                 \
+static QueueHandle_t temperature_queue_##test_name = NULL;                                                  \
+                                                                                                            \
+struct return_info_##test_name{                                                                             \
+    return_type return_value;                                                                               \
+    uint64_t    return_time;                                                                                \
+};                                                                                                          \
+static struct return_info_##test_name return_info_##test_name[RP2040config_testRUN_ON_CORES];               \
+                                                                                                            \
+static void vSlaveFunction_##test_name(void *pvParameters){                                                 \
+    bool should_continue=true;                                                                              \
+    SlaveSetup();                                                                                           \
+    while(should_continue){                                                                                 \
+        save_time_now();                                                                                    \
+        SlaveLoop();                                                                                        \
+        xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
+    }                                                                                                       \
+    vTaskDelete(NULL);                                                                                      \
+}                                                                                                           \
+                                                                                                            \
+
+static void vMasterFunction_##test_name() {                                                                 \
+    
+    MasterSetup();                                                                                          \
+    bool should_continue=true;                                                                              \
+    TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                      \
+    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
+        xTaskCreate(vSlaveFunction_##test_name,                                                             \
+            STRING(vSlaveFunction_##test_name)STRING(n),                                                    \
+            RP2040config_tskSLAVE_STACK_SIZE,                                                               \
+            NULL,                                                                                           \
+            RP2040config_tskSLAVE_PRIORITY,                                                                 \
+            &vSlaveFunctionHandles[i]);                                                                     \
+        vTaskCoreAffinitySet(vSlaveFunctionHandles[i], (1 << i));                                           \
+    }                                                                                                       \
+    while(should_continue){                                                                                 \
+        MasterLoop();                                                                                       \
+        for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
+            ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
+        }                                                                                                   \
+        bool check_result=check_function(return_name, expected_value);                                      \
+        if(!check_result){                                                                                  \
+            printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                        \
+        }                                                                                                   \
+        for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
+        printf(                                                                                             \
+            STRING(test_name)"> return_core_%d:\t" conversion_char"\n",                                     \
+            i,  return_info_##test_name[i].return_value);                                                   \
+        printf(                                                                                             \
+            STRING(test_name)"> return_time_%d:\t %llu \n",                                                 \
+            i,  return_info_##test_name[i].return_time);                                                    \
+        }                                                                                                   \
+    }                                                                                                       \
+    vTaskDelete(NULL);                                                                                      \
+}        
