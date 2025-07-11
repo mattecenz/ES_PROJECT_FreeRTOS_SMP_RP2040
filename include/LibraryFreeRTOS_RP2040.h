@@ -351,11 +351,10 @@ xTaskCreate(vMasterFunction_##test_name,    \
 #define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, SlaveSetup, SlaveLoop, type, print_tag)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
 static QueueHandle_t master_slave_queue_##test_name = NULL;                                                 \
-static QueueHandle_t temperature_queue_##test_name = NULL;                                                  \
+static QueueHandle_t slave_master_queue_##test_name = NULL;                                                  \
                                                                                                             \
 struct return_info_##test_name{                                                                             \
     return_type return_value;                                                                               \
-    uint64_t    return_time;                                                                                \
 };                                                                                                          \
 static struct return_info_##test_name return_info_##test_name[RP2040config_testRUN_ON_CORES];               \
                                                                                                             \
@@ -363,7 +362,6 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
     bool should_continue=true;                                                                              \
     SlaveSetup();                                                                                           \
     while(should_continue){                                                                                 \
-        save_time_now();                                                                                    \
         SlaveLoop();                                                                                        \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
@@ -396,7 +394,7 @@ static void vMasterFunction_##test_name() {                                     
         }                                                                                                   \
         for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
         printf(                                                                                             \
-            STRING(test_name)"> return_core_%d:\t" conversion_char"\n",                                     \
+            STRING(test_name)"> return_value_%d:\t" conversion_char"\n",                                     \
             i,  return_info_##test_name[i].return_value);                                                   \
         printf(                                                                                             \
             STRING(test_name)"> return_time_%d:\t %llu \n",                                                 \
