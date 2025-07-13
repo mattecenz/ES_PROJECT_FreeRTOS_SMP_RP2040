@@ -33,6 +33,7 @@ void vTaskMasterSetup(){
         // printf("Error during creation of master-slave queue\n");
         vTaskDelete(NULL);
     }
+    printf("HELLO, MASTER SETUP HERE!\n");
 }
 
 // This function will be launched at each iteration of the master.
@@ -46,10 +47,10 @@ void vTaskMasterLoop(){
 
     // Copy the data two times in the slave queue
     for(uint32_t i=0;i<2;++i){
-            send_to_slave(tmp_read);
+            sendQueue(test_temperature,temp_read);
         }
     }
-
+    printf("HELLO, MASTER HERE, just sent some candies!\n");
     // From here on the library will wake up the two slave tasks which will do their job
 }
 
@@ -57,17 +58,18 @@ void vTaskMasterLoop(){
 // This function will be executed once at the start of the slave.
 // NB: Maybe it is not needed at all
 void vTaskSlaveSetup(){
-    // Do nothing
+    printf("HELLO, SLAVE SETUP HERE, just to let Y'ALL know I'm doin nothin!\n");
 }
 
 // This function will be called every time the slave is woken up by the master.
 // The value will be rewritten into the shared queue.
-uint32_t vTaskSlaveLoop(uint_32_t temp_read){
+uint32_t vTaskSlaveLoop(uint32_t temp_read){
 
     // Return the temperature in Celsius in the master-slave queue.
+    printf("HELLO, SLAVE HERE, just received a temperature: %ld K\n", temp_read);
     temp_read=temp_read-273;
 
-    send_to_master(temp_read);
+    sendQueue(test_temperature, temp_read);
 }
 
 
@@ -99,11 +101,9 @@ int main(void) {
         vTaskMasterSetup,
         vTaskMasterLoop,
         DEFAULT_CHECK,
-        uint32_t, // type returned by the slave loop
         vTaskSlaveSetup,
         vTaskSlaveLoop,
-        uint32_t, // type returned by the master loop
         "%ld" // useful if we want to print the value
-    );
+    )
     start_FreeRTOS();
 }

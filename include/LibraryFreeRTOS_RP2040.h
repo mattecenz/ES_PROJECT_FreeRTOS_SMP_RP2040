@@ -125,7 +125,7 @@ static void vMasterFunction_##test_name() {                                     
 #define CHECK_GENERATION(check_function, variables)                                                     \
     bool equal = true;                                                                                  \
     for(int i=0; i<RP2040config_testRUN_ON_CORES-1; i++){                                               \
-        if(!check_function(variables[i].return_value, variables[i+1].return_value)){                    \
+        if(!check_function(*(variables[i].return_value), *(variables[i+1].return_value))){              \
             equal = false;                                                                              \
             break;                                                                                      \
         }                                                                                               \
@@ -141,8 +141,8 @@ static void vMasterFunction_##test_name() {                                     
     It simply returns the negated XOR of the two return values (so if they are the same).
 */
 
-#define DEFAULT_CHECK(return_val_0, return_val_1) \
-    !(return_val_0 ^ return_val_1)                 \
+#define DEFAULT_CHECK(return_val_0, return_val_1)       \
+    !(*((char*)return_val_0) ^ *((char*)return_val_1))  \
 
 // ------------------------------------------------------------------------ //
 //  PUBLIC INTERFACE                                                        //
@@ -349,23 +349,23 @@ xTaskCreate(vMasterFunction_##test_name,    \
 
 #define MASTER_SLAVE_QUEUE_LENGTH RP2040config_testRUN_ON_CORES
 
-#define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, input_type, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
+#define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, SlaveSetup, SlaveLoop, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
-static QueueHandle_t master_to_slave_queue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(input_type));\
-static QueueHandle_t slave_to_master_queue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(return_type));\
+static QueueHandle_t masterSlaveQueue##test_name = NULL;                                                    \
                                                                                                             \
 struct return_info_##test_name{                                                                             \
-    return_type return_value;                                                                               \
+    void* return_value;                                                                                     \
 };                                                                                                          \
 static struct return_info_##test_name return_info_##test_name[RP2040config_testRUN_ON_CORES];               \
                                                                                                             \
 static void vSlaveFunction_##test_name(void *pvParameters){                                                 \
     bool should_continue=true;                                                                              \
-    input_type input;                                                                                       \
+    void *input;                                                                                            \
     SlaveSetup();                                                                                           \
     while(should_continue){                                                                                 \
-        while(xQueueReceive(master_to_slave_queue_##test_name, &input, portMAX_DELAY) == pdTRUE);           \
-        SlaveLoop(input);                                                                                   \
+        while(xQueueReceive(masterSlaveQueue##test_name, &input, portMAX_DELAY) == pdTRUE);                 \
+        //POINTER IS USED TO PASS A COPY AND AVOID CONCURRENCY                                               
+        SlaveLoop(*input);                                                                                  \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
     vTaskDelete(NULL);                                                                                      \
@@ -376,6 +376,7 @@ static void vMasterFunction_##test_name() {                                     
     bool should_continue=true;                                                                              \
     bool check_result = false;                                                                              \
     TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                      \
+    masterSlaveQueue##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(void*));                   \
     MasterSetup();                                                                                          \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         xTaskCreate(vSlaveFunction_##test_name,                                                             \
@@ -392,7 +393,7 @@ static void vMasterFunction_##test_name() {                                     
             ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
         }                                                                                                   \
         for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
-            xQueueReceive(slave_to_master_queue_##test_name, &return_info_##test_name[i], portMAX_DELAY);   \
+            xQueueReceive(masterSlaveQueue##test_name, &return_info_##test_name[i], portMAX_DELAY);         \
         }                                                                                                   \
         CHECK_GENERATION(check_function, return_info_##test_name)                                           \
         if(!check_result){                                                                                  \
@@ -401,16 +402,13 @@ static void vMasterFunction_##test_name() {                                     
         for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
         printf(                                                                                             \
             STRING(test_name)"> return_core_%d:\t" conversion_char"\n",                                     \
-            i,  return_info_##test_name[i].return_value);                                                   \
+            i,  *return_info_##test_name[i].return_value);                                                   \
         }                                                                                                   \
     }                                                                                                       \
-    #Free Queues, notify task to terminate, and delete the task.                                            \
+    //Free Queues, notify task to terminate, and delete the task.
     vTaskDelete(NULL);                                                                                      \
 }                                                                                                           \
-static void send_to_slave(input_type input) {   #cannot generalize with test_name                           \
-    xQueueSend(master_to_slave_queue_##test_name, &input, portMAX_DELAY);                                   \
-}                                                                                                           \
-static void send_to_master(return_type output) {                                                            \
-    xQueueSend(slave_to_master_queue_##test_name, &output, portMAX_DELAY);                                  \
-}                                                                                                           \
+
+#define sendQueue(test_name, input)                                                                         \
+xQueueSend(masterSlaveQueue##test_name, &input, portMAX_DELAY);                                             \
 
