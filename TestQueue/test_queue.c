@@ -13,7 +13,7 @@
 static QueueHandle_t temperature_queue;
 
 // Generic task
-void vTaskTemperatureGenerator(){
+static void vTaskTemperatureGenerator(){
     // NB: the time is in ticks
     vTaskDelay(TEMPERATURE_GENERATION_PERIOD);
 
@@ -26,9 +26,23 @@ void vTaskTemperatureGenerator(){
     }
 }
 
+static void vTaskMasterSetup();
+static void vTaskMasterLoop();
+static void vTaskSlaveSetup();
+static void vTaskSlaveLoop(void* param);
+
+create_test_pipeline(
+    test_temperature, // name of the test
+    vTaskMasterSetup,
+    vTaskMasterLoop,
+    DEFAULT_CHECK,
+    vTaskSlaveSetup,
+    vTaskSlaveLoop,
+    "%ld" // useful if we want to print the value
+)
 
 // This function will be executed once at the start of the master.
-void vTaskMasterSetup(){
+static void vTaskMasterSetup(){
     if(temperature_queue == NULL){
         // printf("Error during creation of master-slave queue\n");
         vTaskDelete(NULL);
@@ -39,7 +53,7 @@ void vTaskMasterSetup(){
 // This function will be launched at each iteration of the master.
 // After the execution of this function the master will submit the work to the slaves.
 // Hence here we need to prepare the values for the slaves.
-void vTaskMasterLoop(){
+static void vTaskMasterLoop(){
     // Read the data from the shared queue
     uint32_t temp_read;
 
@@ -49,7 +63,7 @@ void vTaskMasterLoop(){
     for(uint32_t i=0;i<2;++i){
             sendQueue(test_temperature,temp_read);
         }
-    }
+    
     printf("HELLO, MASTER HERE, just sent some candies!\n");
     // From here on the library will wake up the two slave tasks which will do their job
 }
@@ -57,14 +71,16 @@ void vTaskMasterLoop(){
 
 // This function will be executed once at the start of the slave.
 // NB: Maybe it is not needed at all
-void vTaskSlaveSetup(){
+static void vTaskSlaveSetup(){
     printf("HELLO, SLAVE SETUP HERE, just to let Y'ALL know I'm doin nothin!\n");
 }
 
 // This function will be called every time the slave is woken up by the master.
 // The value will be rewritten into the shared queue.
-uint32_t vTaskSlaveLoop(uint32_t temp_read){
-
+static void vTaskSlaveLoop(void* param){
+    int32_t temp_read;
+    temp_read = *((int32_t*) param);
+    
     // Return the temperature in Celsius in the master-slave queue.
     printf("HELLO, SLAVE HERE, just received a temperature: %ld K\n", temp_read);
     temp_read=temp_read-273;
@@ -96,14 +112,5 @@ int main(void) {
         tskIDLE_PRIORITY,        
         NULL);         
     
-    create_test_pipeline(
-        test_temperature, // name of the test
-        vTaskMasterSetup,
-        vTaskMasterLoop,
-        DEFAULT_CHECK,
-        vTaskSlaveSetup,
-        vTaskSlaveLoop,
-        "%ld" // useful if we want to print the value
-    )
     start_FreeRTOS();
 }

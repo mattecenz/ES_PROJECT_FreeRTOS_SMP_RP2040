@@ -125,7 +125,7 @@ static void vMasterFunction_##test_name() {                                     
 #define CHECK_GENERATION(check_function, variables)                                                     \
     bool equal = true;                                                                                  \
     for(int i=0; i<RP2040config_testRUN_ON_CORES-1; i++){                                               \
-        if(!check_function(*(variables[i].return_value), *(variables[i+1].return_value))){              \
+        if(!check_function(variables[i].return_value, variables[i+1].return_value)){                    \
             equal = false;                                                                              \
             break;                                                                                      \
         }                                                                                               \
@@ -345,10 +345,9 @@ xTaskCreate(vMasterFunction_##test_name,    \
     RP2040config_tskMASTER_PRIORITY,        \
     &masterTaskHandle_##test_name);         \
 
-#endif
 
 #define MASTER_SLAVE_QUEUE_LENGTH RP2040config_testRUN_ON_CORES
-
+//TODO check concurrency problems
 #define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, SlaveSetup, SlaveLoop, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
 static QueueHandle_t masterSlaveQueue##test_name = NULL;                                                    \
@@ -364,14 +363,13 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
     SlaveSetup();                                                                                           \
     while(should_continue){                                                                                 \
         while(xQueueReceive(masterSlaveQueue##test_name, &input, portMAX_DELAY) == pdTRUE);                 \
-        //POINTER IS USED TO PASS A COPY AND AVOID CONCURRENCY                                               
-        SlaveLoop(*input);                                                                                  \
+        SlaveLoop(input);                                                                                   \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
     vTaskDelete(NULL);                                                                                      \
 }                                                                                                           \
                                                                                                             \
-
+                                                                                                            \
 static void vMasterFunction_##test_name() {                                                                 \
     bool should_continue=true;                                                                              \
     bool check_result = false;                                                                              \
@@ -402,13 +400,14 @@ static void vMasterFunction_##test_name() {                                     
         for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
         printf(                                                                                             \
             STRING(test_name)"> return_core_%d:\t" conversion_char"\n",                                     \
-            i,  *return_info_##test_name[i].return_value);                                                   \
+            i, *((long *)return_info_##test_name[i].return_value));                                    \
         }                                                                                                   \
     }                                                                                                       \
-    //Free Queues, notify task to terminate, and delete the task.
     vTaskDelete(NULL);                                                                                      \
-}                                                                                                           \
+    /*Free Queues, notify task to terminate, and delete the task.*/                                         \
+    }                                                                                                       \
 
 #define sendQueue(test_name, input)                                                                         \
 xQueueSend(masterSlaveQueue##test_name, &input, portMAX_DELAY);                                             \
 
+#endif
