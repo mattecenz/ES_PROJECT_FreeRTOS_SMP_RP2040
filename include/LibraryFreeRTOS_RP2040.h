@@ -348,44 +348,45 @@ xTaskCreate(vMasterFunction_##test_name,    \
 
 #define MASTER_SLAVE_QUEUE_LENGTH RP2040config_testRUN_ON_CORES
 //TODO check concurrency problems
-#define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, SlaveSetup, SlaveLoop, conversion_char)          \
+#define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
-// Create two queues for communications master-slave. One sends the inputs and the other receives the outputs
+/* Create two queues for communications master-slave. */                                                    \
+/* One sends the inputs and the other receives the outputs. */                                              \
 static QueueHandle_t masterSendSlaveQueue_##test_name = NULL;                                               \
 static QueueHandle_t masterRecvSlaveQueue_##test_name = NULL;                                               \
                                                                                                             \
-// Define the appropriate data structure for the return values to the master.
-// It contains also the time taken to execute the iteration, calculated automatically.
+/* Define the appropriate data structure for the return values to the master. */                            \
+/* It contains also the time taken to execute the iteration, calculated automatically. */                   \
 struct return_info_##test_name{                                                                             \
-    void* return_value;                                                                                     \
+    return_type return_value;                                                                               \
     uint64_t return_time;                                                                                   \
 };                                                                                                          \
                                                                                                             \
-// Create the function executed by the slave.
-// It is divided between setup and loop phases.
+/* Create the function executed by the slave. */                                                            \
+/* It is divided between setup and loop phases. */                                                          \
 static void vSlaveFunction_##test_name(void *pvParameters){                                                 \
     bool should_continue=true;                                                                              \
-    // Prepare the variable where the inputs will be stored
+    /* Prepare the variable where the inputs will be stored. */                                             \
     void *input;                                                                                            \
-    // Prepare the variable where the outputs will be stored
-    return_info_##test_name return_info;                                                                    \
+    /* Prepare the variable where the outputs will be stored. */                                            \
+    struct return_info_##test_name return_info;                                                             \
     SlaveSetup();                                                                                           \
     while(should_continue){                                                                                 \
-        // Wait that the master pushes something on the queue and save the result locally
+        /* Wait that the master pushes something on the queue and save the result locally. */               \
         while(xQueueReceive(masterSendSlaveQueue_##test_name, &input, portMAX_DELAY) == pdTRUE);            \
-        // Save the time
+        /* Save the time. */                                                                                \
         save_time_now();                                                                                    \
-        // Perform the loop specified by the user
-        SlaveLoop(input);                                                                                   \
-        // Calculate the time and store it
-        return_info.return_time=calc_time_diff()                                                            \
-        // At the end the user will have prepared the return value. 
-        // This value will be returned to the master.
+        /* Perform the loop specified by the user. */                                                       \
+        return_info.return_value=SlaveLoop(input);                                                          \
+        /* Calculate the time and store it. */                                                              \
+        return_info.return_time=calc_time_diff();                                                           \
+        /* At the end the user will have prepared the return value. */                                      \
+        /* This value will be returned to the master. */                                                    \
         if(xQueueSendToBack(masterRecvSlaveQueue_##test_name, &return_info, 0) != pdPASS){                  \
             printf("Fatal error, could not send back data from slave to master in the shared queue \n");    \
-            vTaskDelete(NULL);
+            vTaskDelete(NULL);                                                                              \
         }                                                                                                   \
-        // Notify the master that the task has finished the iteration.
+        /* Notify the master that the task has finished the iteration. */                                   \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
     vTaskDelete(NULL);                                                                                      \
@@ -395,24 +396,24 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
 static void vMasterFunction_##test_name() {                                                                 \
     bool should_continue=true;                                                                              \
     bool check_result = false;                                                                              \
-    // Store the task handles of the slaves in order to assign them to a core.
+    /* Store the task handles of the slaves in order to assign them to a core. */                           \
     TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                      \
-    // Store the data received by each slave
-    return_info_##test_name return_info_slaves[RP2040config_testRUN_ON_CORES]                               \
-    // Create the two queues
+    /* Store the data  by each slave. */                                                                    \
+    struct return_info_##test_name return_info_slaves[RP2040config_testRUN_ON_CORES];                       \
+    /* Create the two queues. */                                                                            \
     masterSendSlaveQueue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(void*));              \
-    if(masterSendSlaveQueue_##test_name == null){                                                           \
+    if(masterSendSlaveQueue_##test_name == NULL){                                                           \
         printf("Error when creating the send queue from master. \n");                                       \
         vTaskDelete(NULL);                                                                                  \
     }                                                                                                       \
-    masterRecvSlaveQueue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(return_info_##test_name)) \
-    if(masterRecvSlaveQueue_##test_name == null){                                                           \
+    masterRecvSlaveQueue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(struct return_info_##test_name)); \
+    if(masterRecvSlaveQueue_##test_name == NULL){                                                           \
         printf("Error when creating the receive queue from master. \n");                                    \
         vTaskDelete(NULL);                                                                                  \
     }                                                                                                       \
-    // Call the setup from the user
+    /* Call the setup from the user. */                                                                     \
     MasterSetup();                                                                                          \
-    // Create the slave tasks and assign them each to a core
+    /* Create the slave tasks and assign them each to a core. */                                            \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         xTaskCreate(vSlaveFunction_##test_name,                                                             \
             STRING(vSlaveFunction_##test_name)STRING(n),                                                    \
@@ -422,32 +423,32 @@ static void vMasterFunction_##test_name() {                                     
             &vSlaveFunctionHandles[i]);                                                                     \
         vTaskCoreAffinitySet(vSlaveFunctionHandles[i], (1 << i));                                           \
     }                                                                                                       \
-    // Loop of the master
+    /* Loop of the master. */                                                                               \
     while(should_continue){                                                                                 \
-        // Call the function by the user.
-        // Here he will setup the inputs queue to send the data to each core
+        /* Call the function by the user. */                                                                \
+        /* Here he will setup the inputs queue to send the data to each core. */                            \
         MasterLoop();                                                                                       \
-        // From now on he will wait for the tasks to finish
+        /* From now on he will wait for the tasks to finish. */                                             \
         for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
             ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
         }                                                                                                   \
-        // At the end read the data from the return queue
+        /* At the end read the data from the return queue. */                                               \
         for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
             xQueueReceive(masterRecvSlaveQueue_##test_name, &return_info_slaves[i], portMAX_DELAY);         \
         }                                                                                                   \
-        // TODO: decide a bit how to do the check
+        /* TODO: decide a bit how to do the check. */                                                       \
         CHECK_GENERATION(check_function, return_info_slaves)                                                \
         if(!check_result){                                                                                  \
             printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                        \
         }                                                                                                   \
-        // Here we actually have a problem, as we do not know a priori the core number 
-        // since the data received in the queue can be in any order. So think about this more
+        /* Here we actually have a problem, as we do not know a priori the core number */                   \
+        /* since the data received in the queue can be in any order. So think about this more. */           \
         for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
             printf(                                                                                         \
                 STRING(test_name)"> return_value_core_%d:\t" conversion_char"\n",                           \
-                i, *((long *)return_info_##test_name[i].return_value));                                     \
+                i, return_info_slaves[i].return_value);                                                     \
             printf(                                                                                         \
-                STRING(test_name)"> return_time__core_%d:\t%lu\n",                                          \
+                STRING(test_name)"> return_time__core_%d:\t%llu\n",                                         \
                 i, return_info_slaves[i].return_time);                                                      \
         }                                                                                                   \
     }                                                                                                       \
@@ -461,10 +462,5 @@ for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                               
         printf("Error since the send queue from the master is full. \n");                                   \
     }                                                                                                       \
 }                                                                                                           \
-
-// Here should we expect that the value is a (void*) ? Maybe its better to just do a return type ?
-#define prepare_slaves_output(test_name, output)                                                            \
-return_info_##test_name.return_value=output;                                                                \
-
 
 #endif

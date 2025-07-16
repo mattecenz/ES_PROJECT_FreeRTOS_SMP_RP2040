@@ -29,16 +29,17 @@ static void vTaskTemperatureGenerator(){
 static void vTaskMasterSetup();
 static void vTaskMasterLoop();
 static void vTaskSlaveSetup();
-static void vTaskSlaveLoop(void* param);
+static uint32_t vTaskSlaveLoop(void* param);
 
 create_test_pipeline(
     test_temperature, // name of the test
     vTaskMasterSetup,
     vTaskMasterLoop,
-    DEFAULT_CHECK,
+    DEFAULT_CHECK, // TODO: FIX THIS DEFAULT CHECK
     vTaskSlaveSetup,
     vTaskSlaveLoop,
-    "%ld" // useful if we want to print the value
+    uint32_t,
+    "%lu" // useful if we want to print the value
 )
 
 // This function will be executed once at the start of the master.
@@ -75,15 +76,14 @@ static void vTaskSlaveSetup(){
 
 // This function will be called every time the slave is woken up by the master.
 // The value will be rewritten into the shared queue.
-static void vTaskSlaveLoop(void* param){
+static uint32_t vTaskSlaveLoop(void* param){
     int32_t temp_read = *((int32_t*) param);
     
     // Return the temperature in Celsius in the master-slave queue.
     printf("HELLO, SLAVE HERE, just received a temperature: %ld K\n", temp_read);
     temp_read=temp_read-273;
 
-    // TODO: THIS DOES NOT COMPILE
-    prepare_slaves_output(test_temperature, temp_read);
+    return temp_read;
 }
 
 
@@ -100,7 +100,7 @@ int main(void) {
     }
 
     // Prototype of library call.
-    // start_test_pipeline(test_tempetaure);
+    start_test_pipeline(test_temperature);
 
     // Here we create the taks for the temperature generator.
     xTaskCreate(vTaskTemperatureGenerator,    
