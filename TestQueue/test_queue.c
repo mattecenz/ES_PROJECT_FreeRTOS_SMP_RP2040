@@ -57,12 +57,10 @@ static void vTaskMasterLoop(){
     // Read the data from the shared queue
     uint32_t temp_read;
 
-    while(xQueueReceive(temperature_queue, &temp_read, 0) == errQUEUE_EMPTY);
+    while(xQueueReceive(temperature_queue, &temp_read, portMAX_DELAY) == errQUEUE_EMPTY);
 
     // Copy the data two times in the slave queue
-    for(uint32_t i=0;i<2;++i){
-            sendQueue(test_temperature,temp_read);
-        }
+    prepare_input_for_slaves(test_temperature,temp_read);
     
     printf("HELLO, MASTER HERE, just sent some candies!\n");
     // From here on the library will wake up the two slave tasks which will do their job
@@ -78,14 +76,14 @@ static void vTaskSlaveSetup(){
 // This function will be called every time the slave is woken up by the master.
 // The value will be rewritten into the shared queue.
 static void vTaskSlaveLoop(void* param){
-    int32_t temp_read;
-    temp_read = *((int32_t*) param);
+    int32_t temp_read = *((int32_t*) param);
     
     // Return the temperature in Celsius in the master-slave queue.
     printf("HELLO, SLAVE HERE, just received a temperature: %ld K\n", temp_read);
     temp_read=temp_read-273;
 
-    sendQueue(test_temperature, temp_read);
+    // TODO: THIS DOES NOT COMPILE
+    prepare_slaves_output(test_temperature, temp_read);
 }
 
 
@@ -98,7 +96,7 @@ int main(void) {
 
     if(temperature_queue == NULL){
         ////printf("Errore creazione coda temperatura\n");
-        return;
+        return -1;
     }
 
     // Prototype of library call.
@@ -110,7 +108,7 @@ int main(void) {
         configMINIMAL_STACK_SIZE,      
         NULL,  // no params                                 
         tskIDLE_PRIORITY,        
-        NULL);         
+        NULL);
     
     start_FreeRTOS();
 }
