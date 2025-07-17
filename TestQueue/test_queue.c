@@ -15,14 +15,16 @@ static QueueHandle_t temperature_queue;
 // Generic task
 static void vTaskTemperatureGenerator(){
     // NB: the time is in ticks
-    vTaskDelay(TEMPERATURE_GENERATION_PERIOD);
+    while(true){
+        vTaskDelay(TEMPERATURE_GENERATION_PERIOD);
 
     // Generate a random uniform number (in Kelvin) between 10 and 30 degrees (Celsius).
-    uint32_t temp = get_rand_32()%21 + 273 +10;
-
-    // This post to the queue copies the value. 
-    if(xQueueSendToBack(temperature_queue, (void*) &temp, 0) != pdPASS){
+        uint32_t temp = get_rand_32()%21 + 273 +10;
+        printf("Temperature generated: %ld K\n", temp);
+        // This post to the queue copies the value. 
+        if(xQueueSendToBack(temperature_queue, (void*) &temp, 0) != pdPASS){
         // In case it is full then it returns immediately (our value is simulated, nothing happens if its lost).
+        }
     }
 }
 
@@ -60,13 +62,14 @@ static void vTaskMasterLoop(){
     uint32_t result;
     bool outcome;
 
-    if(count == 100){
+    if(count == 5){
         exit_test_pipeline(test_temperature);
     }
     while(xQueueReceive(temperature_queue, &temp_read, portMAX_DELAY) == errQUEUE_EMPTY);
 
     // Copy the data two times in the slave queue
-    prepare_input_for_slaves(test_temperature,temp_read);
+    printf("HELLO, MASTER HERE, just received a temperature: %ld K\n", temp_read);
+    prepare_input_for_slaves(test_temperature, temp_read)
     
     printf("HELLO, MASTER HERE, just sent some candies!\n");
     // From here on the library will wake up the two slave tasks which will do their job
@@ -88,7 +91,7 @@ static void vTaskSlaveSetup(){
 
 // This function will be called every time the slave is woken up by the master.
 // The value will be rewritten into the shared queue.
-static uint32_t vTaskSlaveLoop(void* param){
+static uint32_t vTaskSlaveLoop(void* param){                                                                                 
     int32_t temp_read = *((int32_t*) param);
     
     // Return the temperature in Celsius in the master-slave queue.

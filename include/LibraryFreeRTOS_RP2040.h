@@ -374,8 +374,8 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
     SlaveSetup();                                                                                           \
     while(true){                                                                                            \
         /* Wait that the master pushes something on the queue and save the result locally. */               \
-        while(xQueueReceive(masterSendSlaveQueue_##test_name, &input, portMAX_DELAY) == pdTRUE);            \
-        if(input == (void*)EXIT_PIPELINE){                                                                  \
+        while(xQueueReceive(masterSendSlaveQueue_##test_name, &input, portMAX_DELAY) != pdPASS);            \
+        if(input == (void *)EXIT_PIPELINE){                                                                 \
             /* If the input is the exit pipeline, then we stop the task. */                                 \
             break;                                                                                          \
         }                                                                                                   \
@@ -389,6 +389,7 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
         return_info.core_id = get_core_num();                                                               \
         /* At the end the user will have prepared the return value. */                                      \
         /* This value will be returned to the master. */                                                    \
+        printf("SENDING BACK TO MASTER\n");                                                                 \
         if(xQueueSendToBack(masterRecvSlaveQueue_##test_name, &return_info, 0) != pdPASS){                  \
             printf("Fatal error, could not send back data from slave to master in the shared queue \n");    \
             vTaskDelete(NULL);                                                                              \
@@ -470,7 +471,8 @@ static void vMasterFunction_##test_name() {                                     
 
 #define prepare_input_for_slaves(test_name, input)                                                          \
 for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                                                           \
-    if(xQueueSend(masterSendSlaveQueue_##test_name, &input, 0)!=pdPASS){                                    \
+    void* input_ptr = &input;                                                                               \
+    if(xQueueSend(masterSendSlaveQueue_##test_name, &input_ptr, 0)!=pdPASS){                               \
         printf("Error since the send queue from the master is full. \n");                                   \
     }                                                                                                       \
 }                                                                                                           \
