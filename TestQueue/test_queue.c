@@ -70,7 +70,7 @@ static void vTaskMasterLoop(){
     
     printf("HELLO, MASTER HERE, just sent some candies!\n");
     // From here on the library will wake up the two slave tasks which will do their job
-    recieve_output_from_slaves(test_temperature, DEFAULT_CHECK, result, outcome);
+    recieve_output_from_slaves(test_temperature, DEFAULT_CHECK, result, outcome)
     if(outcome){
         printf("HELLO, MASTER HERE, just received a temperature: %ld K\n", result);
     } else {

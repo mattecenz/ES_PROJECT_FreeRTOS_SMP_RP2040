@@ -363,6 +363,7 @@ struct return_info_##test_name{                                                 
     uint32_t core_id;                                                                                       \
 };                                                                                                          \
 static bool should_continue##test_name=true;                                                                \
+static struct return_info_##test_name return_info_slaves[RP2040config_testRUN_ON_CORES];                    \
 /* Create the function executed by the slave. */                                                            \
 /* It is divided between setup and loop phases. */                                                          \
 static void vSlaveFunction_##test_name(void *pvParameters){                                                 \
@@ -405,7 +406,6 @@ static void vMasterFunction_##test_name() {                                     
     /* Store the task handles of the slaves in order to assign them to a core. */                           \
     TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                      \
     /* Store the data  by each slave. */                                                                    \
-    struct return_info_##test_name return_info_slaves[RP2040config_testRUN_ON_CORES];                       \
     /* Create the two queues. */                                                                            \
     masterSendSlaveQueue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(void*));              \
     if(masterSendSlaveQueue_##test_name == NULL){                                                           \
@@ -475,7 +475,7 @@ for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                               
     }                                                                                                       \
 }                                                                                                           \
 
-#define recieve_output_from_slaves(test_name, check_function, output, outcome)                                        
+#define recieve_output_from_slaves(test_name, check_function, output, outcome)                      \
 bool check_result = false;                                                                          \
 /* From now on he will wait for the tasks to finish. */                                             \
 for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
@@ -498,5 +498,5 @@ if(check_result){                                                               
 
 #endif
 
-#define exit_test_pipeline(test_name)                                                               
-should_continue##test_name=false                                                                    \
+#define exit_test_pipeline(test_name)                                                               \
+should_continue##test_name=false                                                                    
