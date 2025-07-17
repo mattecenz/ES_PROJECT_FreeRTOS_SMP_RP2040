@@ -35,19 +35,19 @@ create_test_pipeline(
     test_temperature, // name of the test
     vTaskMasterSetup,
     vTaskMasterLoop,
-    DEFAULT_CHECK, // TODO: FIX THIS DEFAULT CHECK
     vTaskSlaveSetup,
     vTaskSlaveLoop,
     uint32_t,
     "%lu" // useful if we want to print the value
 )
-
+static int count;
 // This function will be executed once at the start of the master.
 static void vTaskMasterSetup(){
     if(temperature_queue == NULL){
         // printf("Error during creation of master-slave queue\n");
         vTaskDelete(NULL);
     }
+    count = 0;
     printf("HELLO, MASTER SETUP HERE!\n");
 }
 
@@ -57,7 +57,12 @@ static void vTaskMasterSetup(){
 static void vTaskMasterLoop(){
     // Read the data from the shared queue
     uint32_t temp_read;
+    uint32_t result;
+    bool outcome;
 
+    if(count == 100){
+        exit_test_pipeline(test_temperature);
+    }
     while(xQueueReceive(temperature_queue, &temp_read, portMAX_DELAY) == errQUEUE_EMPTY);
 
     // Copy the data two times in the slave queue
@@ -65,6 +70,13 @@ static void vTaskMasterLoop(){
     
     printf("HELLO, MASTER HERE, just sent some candies!\n");
     // From here on the library will wake up the two slave tasks which will do their job
+    recieve_output_from_slaves(test_temperature, DEFAULT_CHECK, result, outcome);
+    if(outcome){
+        printf("HELLO, MASTER HERE, just received a temperature: %ld K\n", result);
+    } else {
+        printf("HELLO, MASTER HERE, something went wrong with the slaves!\n");
+    }
+    count++;
 }
 
 

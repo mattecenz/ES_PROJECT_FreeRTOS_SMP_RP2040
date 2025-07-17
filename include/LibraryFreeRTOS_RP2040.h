@@ -142,7 +142,7 @@ static void vMasterFunction_##test_name() {                                     
 */
 
 #define DEFAULT_CHECK(return_val_0, return_val_1)       \
-    !(*((char*)return_val_0) ^ *((char*)return_val_1))  \
+    !(return_val_0 ^ return_val_1)  \
 
 // ------------------------------------------------------------------------ //
 //  PUBLIC INTERFACE                                                        //
@@ -345,10 +345,10 @@ xTaskCreate(vMasterFunction_##test_name,    \
     RP2040config_tskMASTER_PRIORITY,        \
     &masterTaskHandle_##test_name);         \
 
-
+#define EXIT_PIPELINE 0x80
 #define MASTER_SLAVE_QUEUE_LENGTH RP2040config_testRUN_ON_CORES
 //TODO check concurrency problems
-#define create_test_pipeline(test_name, MasterSetup, MasterLoop, MasterCheck, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
+#define create_test_pipeline(test_name, MasterSetup, MasterLoop, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
 /* Create two queues for communications master-slave. */                                                    \
 /* One sends the inputs and the other receives the outputs. */                                              \
@@ -360,26 +360,32 @@ static QueueHandle_t masterRecvSlaveQueue_##test_name = NULL;                   
 struct return_info_##test_name{                                                                             \
     return_type return_value;                                                                               \
     uint64_t return_time;                                                                                   \
+    uint32_t core_id;                                                                                       \
 };                                                                                                          \
-                                                                                                            \
+static bool should_continue##test_name=true;                                                                \
 /* Create the function executed by the slave. */                                                            \
 /* It is divided between setup and loop phases. */                                                          \
 static void vSlaveFunction_##test_name(void *pvParameters){                                                 \
-    bool should_continue=true;                                                                              \
     /* Prepare the variable where the inputs will be stored. */                                             \
     void *input;                                                                                            \
     /* Prepare the variable where the outputs will be stored. */                                            \
     struct return_info_##test_name return_info;                                                             \
     SlaveSetup();                                                                                           \
-    while(should_continue){                                                                                 \
+    while(true){                                                                                            \
         /* Wait that the master pushes something on the queue and save the result locally. */               \
         while(xQueueReceive(masterSendSlaveQueue_##test_name, &input, portMAX_DELAY) == pdTRUE);            \
+        if(input == (void*)EXIT_PIPELINE){                                                                  \
+            /* If the input is the exit pipeline, then we stop the task. */                                 \
+            break;                                                                                          \
+        }                                                                                                   \
         /* Save the time. */                                                                                \
         save_time_now();                                                                                    \
         /* Perform the loop specified by the user. */                                                       \
         return_info.return_value=SlaveLoop(input);                                                          \
         /* Calculate the time and store it. */                                                              \
         return_info.return_time=calc_time_diff();                                                           \
+        /* Save the core id where the task is running. */                                                   \
+        return_info.core_id = get_core_num();                                                               \
         /* At the end the user will have prepared the return value. */                                      \
         /* This value will be returned to the master. */                                                    \
         if(xQueueSendToBack(masterRecvSlaveQueue_##test_name, &return_info, 0) != pdPASS){                  \
@@ -389,13 +395,13 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
         /* Notify the master that the task has finished the iteration. */                                   \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
-    vTaskDelete(NULL);                                                                                      \
+    /* TODO: dealloc task space */                                                                          \
+    printf("Slave %s received exit pipeline, exiting...\n", STRING(vSlaveFunction_##test_name));            \
+    xTaskNotifyGive(masterTaskHandle_##test_name);                                                          \
 }                                                                                                           \
                                                                                                             \
                                                                                                             \
 static void vMasterFunction_##test_name() {                                                                 \
-    bool should_continue=true;                                                                              \
-    bool check_result = false;                                                                              \
     /* Store the task handles of the slaves in order to assign them to a core. */                           \
     TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                      \
     /* Store the data  by each slave. */                                                                    \
@@ -424,32 +430,38 @@ static void vMasterFunction_##test_name() {                                     
         vTaskCoreAffinitySet(vSlaveFunctionHandles[i], (1 << i));                                           \
     }                                                                                                       \
     /* Loop of the master. */                                                                               \
-    while(should_continue){                                                                                 \
+    while(should_continue##test_name){                                                                      \
         /* Call the function by the user. */                                                                \
         /* Here he will setup the inputs queue to send the data to each core. */                            \
         MasterLoop();                                                                                       \
-        /* From now on he will wait for the tasks to finish. */                                             \
-        for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
-            ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
+        if(should_continue##test_name){                                                                     \
+            for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                              \
+                printf(                                                                                     \
+                    STRING(test_name)"> return_core_id__core_%d:\t%d\n",                                    \
+                    i, return_info_slaves[i].core_id);                                                      \
+                printf(                                                                                     \
+                    STRING(test_name)"> return_value_core_%d:\t" conversion_char"\n",                       \
+                    i, return_info_slaves[i].return_value);                                                 \
+                printf(                                                                                     \
+                    STRING(test_name)"> return_time__core_%d:\t%llu\n\n",                                   \
+                    i, return_info_slaves[i].return_time);                                                  \
+            }                                                                                               \
         }                                                                                                   \
-        /* At the end read the data from the return queue. */                                               \
-        for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
-            xQueueReceive(masterRecvSlaveQueue_##test_name, &return_info_slaves[i], portMAX_DELAY);         \
+    }                                                                                                       \
+    /* Notify slaves to finish. */                                                                          \
+    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
+        if(xQueueSend(masterSendSlaveQueue_##test_name, EXIT_PIPELINE, 0) != pdPASS){                       \
+            printf("Error notifying the slaves.\n");                                                        \
         }                                                                                                   \
-        /* TODO: decide a bit how to do the check. */                                                       \
-        CHECK_GENERATION(check_function, return_info_slaves)                                                \
-        if(!check_result){                                                                                  \
-            printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                        \
-        }                                                                                                   \
-        /* Here we actually have a problem, as we do not know a priori the core number */                   \
-        /* since the data received in the queue can be in any order. So think about this more. */           \
-        for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
-            printf(                                                                                         \
-                STRING(test_name)"> return_value_core_%d:\t" conversion_char"\n",                           \
-                i, return_info_slaves[i].return_value);                                                     \
-            printf(                                                                                         \
-                STRING(test_name)"> return_time__core_%d:\t%llu\n",                                         \
-                i, return_info_slaves[i].return_time);                                                      \
+    }                                                                                                       \
+    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
+        /* Wait for the slaves to finish. */                                                                \
+        ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                           \
+    }                                                                                                       \
+    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
+        /* Delete the slave tasks. */                                                                       \
+        if(vSlaveFunctionHandles[i] != NULL){                                                               \
+            vTaskDelete(vSlaveFunctionHandles[i]);                                                          \
         }                                                                                                   \
     }                                                                                                       \
     vTaskDelete(NULL);                                                                                      \
@@ -463,4 +475,28 @@ for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                               
     }                                                                                                       \
 }                                                                                                           \
 
+#define recieve_output_from_slaves(test_name, check_function, output, outcome)                                        
+bool check_result = false;                                                                          \
+/* From now on he will wait for the tasks to finish. */                                             \
+for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
+    ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
+}                                                                                                   \
+/* At the end read the data from the return queue. */                                               \
+for(int i=0;i<RP2040config_testRUN_ON_CORES; i++){                                                  \
+    xQueueReceive(masterRecvSlaveQueue_##test_name, &return_info_slaves[i], portMAX_DELAY);         \
+}                                                                                                   \
+/* TODO: decide a bit how to do the check. */                                                       \
+CHECK_GENERATION(check_function, return_info_slaves)                                                \
+if(check_result){                                                                                   \
+    output = return_info_slaves[0].return_value;                                                    \
+    outcome = true;                                                                                 \
+} else {                                                                                            \
+    output = 0;                                                                                     \
+    outcome = false;                                                                                \
+    printf(STRING(test_name)"> check_result: EQUALS\n");                                            \
+}                                                                                                   \
+
 #endif
+
+#define exit_test_pipeline(test_name)                                                               
+should_continue##test_name=false                                                                    \
