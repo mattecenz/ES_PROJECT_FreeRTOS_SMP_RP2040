@@ -345,9 +345,8 @@ xTaskCreate(vMasterFunction_##test_name,    \
     RP2040config_tskMASTER_PRIORITY,        \
     &masterTaskHandle_##test_name);         \
 
-#define EXIT_PIPELINE 0x80
+#define EXIT_PIPELINE 0x80 // Special value used to exit the pipeline and stop the slave tasks.
 #define MASTER_SLAVE_QUEUE_LENGTH RP2040config_testRUN_ON_CORES
-//TODO check concurrency problems
 #define create_test_pipeline(test_name, MasterSetup, MasterLoop, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
 /* Create two queues for communications master-slave. */                                                    \
@@ -362,6 +361,7 @@ struct return_info_##test_name{                                                 
     uint64_t return_time;                                                                                   \
     uint32_t core_id;                                                                                       \
 };                                                                                                          \
+/* This variable is used to control the execution of the MasterTask. */                                     \
 static bool should_continue##test_name=true;                                                                \
 static struct return_info_##test_name return_info_slaves[RP2040config_testRUN_ON_CORES];                    \
 /* Create the function executed by the slave. */                                                            \
@@ -373,8 +373,9 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
     struct return_info_##test_name return_info;                                                             \
     SlaveSetup();                                                                                           \
     while(true){                                                                                            \
-        /* Wait that the master pushes something on the queue and save the result locally. */               \
+        /* Wait that the master pushes something*/                                                          \
         while(xQueueReceive(masterSendSlaveQueue_##test_name, &input, portMAX_DELAY) != pdPASS);            \
+        /* If the input is EXIT_PIPELINE value, then we stop the task. */                                   \
         if(input == (void *)EXIT_PIPELINE){                                                                 \
             /* If the input is the exit pipeline, then we stop the task. */                                 \
             break;                                                                                          \
@@ -389,7 +390,6 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
         return_info.core_id = get_core_num();                                                               \
         /* At the end the user will have prepared the return value. */                                      \
         /* This value will be returned to the master. */                                                    \
-        printf("SENDING BACK TO MASTER\n");                                                                 \
         if(xQueueSendToBack(masterRecvSlaveQueue_##test_name, &return_info, 0) != pdPASS){                  \
             printf("Fatal error, could not send back data from slave to master in the shared queue \n");    \
             vTaskDelete(NULL);                                                                              \
@@ -400,6 +400,8 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
     /* TODO: dealloc task space */                                                                          \
     printf("Slave %s received exit pipeline, exiting...\n", STRING(vSlaveFunction_##test_name));            \
     xTaskNotifyGive(masterTaskHandle_##test_name);                                                          \
+    /* TODO: Find better way to finish, the one which dealloc task struct. */                               \
+    vTaskDelete(NULL);                                                                                      \
 }                                                                                                           \
                                                                                                             \
                                                                                                             \
@@ -433,12 +435,11 @@ static void vMasterFunction_##test_name() {                                     
     /* Loop of the master. */                                                                               \
     while(should_continue##test_name){                                                                      \
         /* Call the function by the user. */                                                                \
-        /* Here he will setup the inputs queue to send the data to each core. */                            \
         MasterLoop();                                                                                       \
-        if(should_continue##test_name){                                                                     \
+        if(should_continue##test_name){     /* If the master hasn't finished */                             \
             for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                              \
                 printf(                                                                                     \
-                    STRING(test_name)"> return_core_id__core_%d:\t%d\n",                                    \
+                    STRING(test_name)"> return_core_id__core_%d: %d\n",                                     \
                     i, return_info_slaves[i].core_id);                                                      \
                 printf(                                                                                     \
                     STRING(test_name)"> return_value_core_%d:\t" conversion_char"\n",                       \
@@ -450,24 +451,37 @@ static void vMasterFunction_##test_name() {                                     
         }                                                                                                   \
     }                                                                                                       \
     /* Notify slaves to finish. */                                                                          \
+    printf("Master %s received exit command, exiting...\n", STRING(vMasterFunction_##test_name));           \
+    uint32_t exit_pipeline = EXIT_PIPELINE;                                                                 \
+    /* Notify the slaves to exit the pipeline. */                                                           \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
-        if(xQueueSend(masterSendSlaveQueue_##test_name, EXIT_PIPELINE, 0) != pdPASS){                       \
+        if(xQueueSend(masterSendSlaveQueue_##test_name, (void*)&exit_pipeline, 0) != pdPASS){               \
             printf("Error notifying the slaves.\n");                                                        \
         }                                                                                                   \
     }                                                                                                       \
+    /* Wait for the slaves to finish. */                                                                    \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         /* Wait for the slaves to finish. */                                                                \
         ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                           \
     }                                                                                                       \
+    /* Delete the slave tasks.                                                                              \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
-        /* Delete the slave tasks. */                                                                       \
         if(vSlaveFunctionHandles[i] != NULL){                                                               \
             vTaskDelete(vSlaveFunctionHandles[i]);                                                          \
         }                                                                                                   \
     }                                                                                                       \
-    vTaskDelete(NULL);                                                                                      \
-    /*Free Queues, notify task to terminate, and delete the task.*/                                         \
+    */                                                                                           \
+    /* At the end delete the queues. */                                                                     \
+    if(masterSendSlaveQueue_##test_name != NULL){                                                           \
+        vQueueDelete(masterSendSlaveQueue_##test_name);                                                     \
+        masterSendSlaveQueue_##test_name = NULL;                                                            \
     }                                                                                                       \
+    if(masterRecvSlaveQueue_##test_name != NULL){                                                           \
+        vQueueDelete(masterRecvSlaveQueue_##test_name);                                                     \
+        masterRecvSlaveQueue_##test_name = NULL;                                                            \
+    }                                                                                                       \
+    vTaskDelete(NULL);                                                                                      \
+}                                                                                                           \
 
 #define prepare_input_for_slaves(test_name, input)                                                          \
 for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                                                           \
@@ -477,7 +491,10 @@ for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                               
     }                                                                                                       \
 }                                                                                                           \
 
-#define recieve_output_from_slaves(test_name, check_function, output, outcome)                      \
+//Function used to receive the output from the slaves:
+//output is returned value
+//outcome is true if the check was successful, false otherwise.
+#define receive_output_from_slaves(test_name, check_function, output, outcome)                      \
 bool check_result = false;                                                                          \
 /* From now on he will wait for the tasks to finish. */                                             \
 for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
@@ -498,7 +515,8 @@ if(check_result){                                                               
     printf(STRING(test_name)"> check_result: EQUALS\n");                                            \
 }                                                                                                   \
 
-#endif
-
 #define exit_test_pipeline(test_name)                                                               \
-should_continue##test_name=false                                                                    
+should_continue##test_name=false;                                                                   \
+
+
+#endif

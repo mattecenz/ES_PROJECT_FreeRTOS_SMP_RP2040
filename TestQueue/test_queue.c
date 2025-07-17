@@ -15,7 +15,7 @@ static QueueHandle_t temperature_queue;
 // Generic task
 static void vTaskTemperatureGenerator(){
     // NB: the time is in ticks
-    while(true){
+    for(int i=0; i<20; ++i){
         vTaskDelay(TEMPERATURE_GENERATION_PERIOD);
 
     // Generate a random uniform number (in Kelvin) between 10 and 30 degrees (Celsius).
@@ -50,7 +50,6 @@ static void vTaskMasterSetup(){
         vTaskDelete(NULL);
     }
     count = 0;
-    printf("HELLO, MASTER SETUP HERE!\n");
 }
 
 // This function will be launched at each iteration of the master.
@@ -63,19 +62,17 @@ static void vTaskMasterLoop(){
     bool outcome;
 
     if(count == 5){
-        exit_test_pipeline(test_temperature);
+        exit_test_pipeline(test_temperature)
     }
     while(xQueueReceive(temperature_queue, &temp_read, portMAX_DELAY) == errQUEUE_EMPTY);
 
     // Copy the data two times in the slave queue
-    printf("HELLO, MASTER HERE, just received a temperature: %ld K\n", temp_read);
     prepare_input_for_slaves(test_temperature, temp_read)
     
-    printf("HELLO, MASTER HERE, just sent some candies!\n");
     // From here on the library will wake up the two slave tasks which will do their job
-    recieve_output_from_slaves(test_temperature, DEFAULT_CHECK, result, outcome)
+    receive_output_from_slaves(test_temperature, DEFAULT_CHECK, result, outcome)
     if(outcome){
-        printf("HELLO, MASTER HERE, just received a temperature: %ld K\n", result);
+        printf("HELLO, MASTER HERE, just received a temperature: %ld C\n", result);
     } else {
         printf("HELLO, MASTER HERE, something went wrong with the slaves!\n");
     }
@@ -86,7 +83,6 @@ static void vTaskMasterLoop(){
 // This function will be executed once at the start of the slave.
 // NB: Maybe it is not needed at all
 static void vTaskSlaveSetup(){
-    printf("HELLO, SLAVE SETUP HERE, just to let Y'ALL know I'm doin nothin!\n");
 }
 
 // This function will be called every time the slave is woken up by the master.
@@ -95,7 +91,6 @@ static uint32_t vTaskSlaveLoop(void* param){
     int32_t temp_read = *((int32_t*) param);
     
     // Return the temperature in Celsius in the master-slave queue.
-    printf("HELLO, SLAVE HERE, just received a temperature: %ld K\n", temp_read);
     temp_read=temp_read-273;
 
     return temp_read;
