@@ -425,23 +425,22 @@ static void vMasterFunction_##test_name() {                                     
     while(should_continue##test_name){                                                                      \
         /* Call the function by the user. */                                                                \
         MasterLoop();                                                                                       \
-        if(should_continue##test_name){     /* If the master hasn't finished */                             \
-            for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                              \
-                printf(                                                                                     \
-                    STRING(test_name)"> return_core_id__core:\t %d\n",                                     \
-                    i);                                                      \
-                printf(                                                                                     \
-                    STRING(test_name)"> return_value_core_%d:\t" conversion_char"\n",                       \
-                    i, return_info_slaves[i].return_value);                                                 \
-                printf(                                                                                     \
-                    STRING(test_name)"> return_time__core_%d:\t%llu\n\n",                                   \
-                    i, return_info_slaves[i].return_time);                                                  \
-            }                                                                                               \
+        for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
+            printf(                                                                                         \
+                STRING(test_name)"> return_core_id__core:\t %d\n",                                          \
+                i);                                                                                         \
+            printf(                                                                                         \
+                STRING(test_name)"> return_value_core_%d:\t" conversion_char"\n",                           \
+                i, return_info_slaves[i].return_value);                                                     \
+            printf(                                                                                         \
+                STRING(test_name)"> return_time__core_%d:\t%llu\n\n",                                       \
+                i, return_info_slaves[i].return_time);                                                      \
         }                                                                                                   \
     }                                                                                                       \
     /* Notify slaves to finish. */                                                                          \
     printf("Master %s received exit command, exiting...\n", STRING(vMasterFunction_##test_name));           \
     uint32_t exit_pipeline = EXIT_PIPELINE;                                                                 \
+    int forced_slaves = 0; /* Count of slaves which are forcefully deleted */                               \
     /* Notify the slaves to exit the pipeline. */                                                           \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         if(xQueueSend(masterSendSlaveQueue_##test_name, (void*)&exit_pipeline, 0) != pdPASS){               \
@@ -450,10 +449,11 @@ static void vMasterFunction_##test_name() {                                     
             if(vSlaveFunctionHandles[i] != NULL){                                                           \
                 vTaskDelete(vSlaveFunctionHandles[i]);                                                      \
             }                                                                                               \
+            forced_slaves++;                                                                                \
         }                                                                                                   \
     }                                                                                                       \
     /* Wait for the slaves to finish. */                                                                    \
-    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
+    for(int i=0;i<(RP2040config_testRUN_ON_CORES-forced_slaves); ++i){                                      \
         /* Wait for the slaves to finish. */                                                                \
         ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                           \
     }                                                                                                       \

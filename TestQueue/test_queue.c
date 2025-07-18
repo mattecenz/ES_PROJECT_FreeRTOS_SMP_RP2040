@@ -28,6 +28,7 @@ static void vTaskTemperatureGenerator(){
         // In case it is full then it returns immediately (our value is simulated, nothing happens if its lost).
         }
     }
+    vTaskDelete(NULL); // Delete the task when done.
 }
 
 static void vTaskMasterSetup();
