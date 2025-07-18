@@ -445,7 +445,11 @@ static void vMasterFunction_##test_name() {                                     
     /* Notify the slaves to exit the pipeline. */                                                           \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         if(xQueueSend(masterSendSlaveQueue_##test_name, (void*)&exit_pipeline, 0) != pdPASS){               \
-            printf("Error notifying the slaves.\n");                                                        \
+            printf("Error notifying the slave. Proceeding with forced deletion...\n");                      \
+            /* Forced deletion from master task */                                                          \
+            if(vSlaveFunctionHandles[i] != NULL){                                                           \
+                vTaskDelete(vSlaveFunctionHandles[i]);                                                      \
+            }                                                                                               \
         }                                                                                                   \
     }                                                                                                       \
     /* Wait for the slaves to finish. */                                                                    \
@@ -453,14 +457,6 @@ static void vMasterFunction_##test_name() {                                     
         /* Wait for the slaves to finish. */                                                                \
         ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                           \
     }                                                                                                       \
-    /* Delete the slave tasks. For now slave deletes itself                                                 \
-    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
-        if(vSlaveFunctionHandles[i] != NULL){                                                               \
-            vTaskDelete(vSlaveFunctionHandles[i]);                                                          \
-        }                                                                                                   \
-    }                                                                                                       \
-    */                                                                                                      \
-    /* At the end delete the queues. */                                                                     \
     if(masterSendSlaveQueue_##test_name != NULL){                                                           \
         vQueueDelete(masterSendSlaveQueue_##test_name);                                                     \
         masterSendSlaveQueue_##test_name = NULL;                                                            \
@@ -471,7 +467,7 @@ static void vMasterFunction_##test_name() {                                     
 #define prepare_input_for_slaves(test_name, input)                                                          \
 for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                                                           \
     void* input_ptr = &input;                                                                               \
-    if(xQueueSend(masterSendSlaveQueue_##test_name, &input_ptr, 0)!=pdPASS){                               \
+    if(xQueueSend(masterSendSlaveQueue_##test_name, &input_ptr, 0)!=pdPASS){                                \
         printf("Error since the send queue from the master is full. \n");                                   \
     }                                                                                                       \
 }                                                                                                           \
