@@ -352,25 +352,22 @@ static TaskHandle_t masterTaskHandle_##test_name = NULL;                        
 /* Create two queues for communications master-slave. */                                                    \
 /* One sends the inputs and the other receives the outputs. */                                              \
 static QueueHandle_t masterSendSlaveQueue_##test_name = NULL;                                               \
-static QueueHandle_t masterRecvSlaveQueue_##test_name = NULL;                                               \
                                                                                                             \
 /* Define the appropriate data structure for the return values to the master. */                            \
 /* It contains also the time taken to execute the iteration, calculated automatically. */                   \
 struct return_info_##test_name{                                                                             \
     return_type return_value;                                                                               \
     uint64_t return_time;                                                                                   \
-    uint32_t core_id;                                                                                       \
 };                                                                                                          \
 /* This variable is used to control the execution of the MasterTask. */                                     \
 static bool should_continue##test_name=true;                                                                \
 static struct return_info_##test_name return_info_slaves[RP2040config_testRUN_ON_CORES];                    \
 /* Create the function executed by the slave. */                                                            \
 /* It is divided between setup and loop phases. */                                                          \
-static void vSlaveFunction_##test_name(void *pvParameters){                                                 \
+static void vSlaveFunction_##test_name(){                                                                   \
     /* Prepare the variable where the inputs will be stored. */                                             \
     void *input;                                                                                            \
-    /* Prepare the variable where the outputs will be stored. */                                            \
-    struct return_info_##test_name return_info;                                                             \
+    int coreNum = get_core_num(); /* Get the core number where the task is running. */                      \
     SlaveSetup();                                                                                           \
     while(true){                                                                                            \
         /* Wait that the master pushes something*/                                                          \
@@ -382,18 +379,11 @@ static void vSlaveFunction_##test_name(void *pvParameters){                     
         }                                                                                                   \
         /* Save the time. */                                                                                \
         save_time_now();                                                                                    \
+        /* Set the values in the shared struct */                                                           \
         /* Perform the loop specified by the user. */                                                       \
-        return_info.return_value=SlaveLoop(input);                                                          \
+        return_info_slaves[coreNum].return_value=SlaveLoop(input);                                          \
         /* Calculate the time and store it. */                                                              \
-        return_info.return_time=calc_time_diff();                                                           \
-        /* Save the core id where the task is running. */                                                   \
-        return_info.core_id = get_core_num();                                                               \
-        /* At the end the user will have prepared the return value. */                                      \
-        /* This value will be returned to the master. */                                                    \
-        if(xQueueSendToBack(masterRecvSlaveQueue_##test_name, &return_info, 0) != pdPASS){                  \
-            printf("Fatal error, could not send back data from slave to master in the shared queue \n");    \
-            vTaskDelete(NULL);                                                                              \
-        }                                                                                                   \
+        return_info_slaves[coreNum].return_time=calc_time_diff();                                           \
         /* Notify the master that the task has finished the iteration. */                                   \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
@@ -415,15 +405,12 @@ static void vMasterFunction_##test_name() {                                     
         printf("Error when creating the send queue from master. \n");                                       \
         vTaskDelete(NULL);                                                                                  \
     }                                                                                                       \
-    masterRecvSlaveQueue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(struct return_info_##test_name)); \
-    if(masterRecvSlaveQueue_##test_name == NULL){                                                           \
-        printf("Error when creating the receive queue from master. \n");                                    \
-        vTaskDelete(NULL);                                                                                  \
-    }                                                                                                       \
     /* Call the setup from the user. */                                                                     \
     MasterSetup();                                                                                          \
     /* Create the slave tasks and assign them each to a core. */                                            \
-    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
+    /* Suspend scheduler so to allow creating new tasks */                                                  \
+    vTaskSuspendAll();                                                                                      \
+    for(int i=0;i<RP2040config_testRUN_ON_CORES; i++){                                                      \
         xTaskCreate(vSlaveFunction_##test_name,                                                             \
             STRING(vSlaveFunction_##test_name)STRING(n),                                                    \
             RP2040config_tskSLAVE_STACK_SIZE,                                                               \
@@ -432,6 +419,8 @@ static void vMasterFunction_##test_name() {                                     
             &vSlaveFunctionHandles[i]);                                                                     \
         vTaskCoreAffinitySet(vSlaveFunctionHandles[i], (1 << i));                                           \
     }                                                                                                       \
+    /* Resume the scheduler so to allow the tasks to run. */                                                \
+    xTaskResumeAll();                                                                                       \
     /* Loop of the master. */                                                                               \
     while(should_continue##test_name){                                                                      \
         /* Call the function by the user. */                                                                \
@@ -439,8 +428,8 @@ static void vMasterFunction_##test_name() {                                     
         if(should_continue##test_name){     /* If the master hasn't finished */                             \
             for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                              \
                 printf(                                                                                     \
-                    STRING(test_name)"> return_core_id__core_%d: %d\n",                                     \
-                    i, return_info_slaves[i].core_id);                                                      \
+                    STRING(test_name)"> return_core_id__core:\t %d\n",                                     \
+                    i);                                                      \
                 printf(                                                                                     \
                     STRING(test_name)"> return_value_core_%d:\t" conversion_char"\n",                       \
                     i, return_info_slaves[i].return_value);                                                 \
@@ -464,21 +453,17 @@ static void vMasterFunction_##test_name() {                                     
         /* Wait for the slaves to finish. */                                                                \
         ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                           \
     }                                                                                                       \
-    /* Delete the slave tasks.                                                                              \
+    /* Delete the slave tasks. For now slave deletes itself                                                 \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         if(vSlaveFunctionHandles[i] != NULL){                                                               \
             vTaskDelete(vSlaveFunctionHandles[i]);                                                          \
         }                                                                                                   \
     }                                                                                                       \
-    */                                                                                           \
+    */                                                                                                      \
     /* At the end delete the queues. */                                                                     \
     if(masterSendSlaveQueue_##test_name != NULL){                                                           \
         vQueueDelete(masterSendSlaveQueue_##test_name);                                                     \
         masterSendSlaveQueue_##test_name = NULL;                                                            \
-    }                                                                                                       \
-    if(masterRecvSlaveQueue_##test_name != NULL){                                                           \
-        vQueueDelete(masterRecvSlaveQueue_##test_name);                                                     \
-        masterRecvSlaveQueue_##test_name = NULL;                                                            \
     }                                                                                                       \
     vTaskDelete(NULL);                                                                                      \
 }                                                                                                           \
@@ -500,10 +485,6 @@ bool check_result = false;                                                      
 for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
     ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
 }                                                                                                   \
-/* At the end read the data from the return queue. */                                               \
-for(int i=0;i<RP2040config_testRUN_ON_CORES; i++){                                                  \
-    xQueueReceive(masterRecvSlaveQueue_##test_name, &return_info_slaves[i], portMAX_DELAY);         \
-}                                                                                                   \
 /* TODO: decide a bit how to do the check. */                                                       \
 CHECK_GENERATION(check_function, return_info_slaves)                                                \
 if(check_result){                                                                                   \
@@ -512,7 +493,6 @@ if(check_result){                                                               
 } else {                                                                                            \
     output = 0;                                                                                     \
     outcome = false;                                                                                \
-    printf(STRING(test_name)"> check_result: EQUALS\n");                                            \
 }                                                                                                   \
 
 #define exit_test_pipeline(test_name)                                                               \

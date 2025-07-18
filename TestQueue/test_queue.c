@@ -7,6 +7,8 @@
 
 #define TEMPERATURE_QUEUE_LENGTH 100
 #define TEMPERATURE_GENERATION_PERIOD 1000
+#define TEMPERATURE_READS 20 // Number of temperature readings to be generated before the test ends.
+#define MASTER_READS 5 // Number of temperature readings to be processed by the master before the test ends.
 #define MASTER_DELAY 500 // half of the period to popolate the temperature queue.
 
 // Define a shared queue and the relative lock between a generic task and the master.
@@ -15,7 +17,7 @@ static QueueHandle_t temperature_queue;
 // Generic task
 static void vTaskTemperatureGenerator(){
     // NB: the time is in ticks
-    for(int i=0; i<20; ++i){
+    for(int i=0; i<TEMPERATURE_READS; ++i){
         vTaskDelay(TEMPERATURE_GENERATION_PERIOD);
 
     // Generate a random uniform number (in Kelvin) between 10 and 30 degrees (Celsius).
@@ -58,10 +60,10 @@ static void vTaskMasterSetup(){
 static void vTaskMasterLoop(){
     // Read the data from the shared queue
     uint32_t temp_read;
-    uint32_t result;
-    bool outcome;
+    uint32_t result; //returned value from the slaves
+    bool outcome; // outcome of the check performed by the slaves
 
-    if(count == 5){
+    if(count == MASTER_READS){
         exit_test_pipeline(test_temperature)
     }
     while(xQueueReceive(temperature_queue, &temp_read, portMAX_DELAY) == errQUEUE_EMPTY);
@@ -83,6 +85,7 @@ static void vTaskMasterLoop(){
 // This function will be executed once at the start of the slave.
 // NB: Maybe it is not needed at all
 static void vTaskSlaveSetup(){
+    //slave body
 }
 
 // This function will be called every time the slave is woken up by the master.
@@ -91,7 +94,7 @@ static uint32_t vTaskSlaveLoop(void* param){
     int32_t temp_read = *((int32_t*) param);
     
     // Return the temperature in Celsius in the master-slave queue.
-    temp_read=temp_read-273;
+    temp_read=temp_read-273+get_rand_32()%2; // add some noise to the temperature reading
 
     return temp_read;
 }
