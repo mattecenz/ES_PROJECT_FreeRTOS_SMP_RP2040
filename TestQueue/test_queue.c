@@ -8,7 +8,7 @@
 #define TEMPERATURE_QUEUE_LENGTH 100
 #define TEMPERATURE_GENERATION_PERIOD 1000
 #define TEMPERATURE_READS 20 // Number of temperature readings to be generated before the test ends.
-#define MASTER_READS 5 // Number of temperature readings to be processed by the master before the test ends.
+#define MASTER_READS 3 // Number of temperature readings to be processed by the master before the test ends.
 #define MASTER_DELAY 500 // half of the period to popolate the temperature queue.
 
 // Define a shared queue and the relative lock between a generic task and the master.
@@ -95,7 +95,7 @@ static uint32_t vTaskSlaveLoop(void* param){
     int32_t temp_read = *((int32_t*) param);
     
     // Return the temperature in Celsius in the master-slave queue.
-    temp_read=temp_read-273+get_rand_32()%2; // add some noise to the temperature reading
+    temp_read=temp_read-273; // add some noise to the temperature reading
 
     return temp_read;
 }

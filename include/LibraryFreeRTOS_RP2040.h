@@ -356,8 +356,8 @@ static QueueHandle_t masterSendSlaveQueue_##test_name = NULL;                   
 /* Define the appropriate data structure for the return values to the master. */                            \
 /* It contains also the time taken to execute the iteration, calculated automatically. */                   \
 struct return_info_##test_name{                                                                             \
-    return_type return_value;                                                                               \
-    uint64_t return_time;                                                                                   \
+    volatile  return_type return_value;                                                                     \
+    volatile uint64_t return_time;                                                                          \
 };                                                                                                          \
 /* This variable is used to control the execution of the MasterTask. */                                     \
 static bool should_continue##test_name=true;                                                                \
@@ -384,10 +384,11 @@ static void vSlaveFunction_##test_name(){                                       
         return_info_slaves[coreNum].return_value=SlaveLoop(input);                                          \
         /* Calculate the time and store it. */                                                              \
         return_info_slaves[coreNum].return_time=calc_time_diff();                                           \
+        /* TODO find a way to flush writes, couldn't find a better way*/                                    \
+        vTaskDelay(pdMS_TO_TICKS(100)); /* Delay to allow time to flush writes. */                          \
         /* Notify the master that the task has finished the iteration. */                                   \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
-    /* TODO: dealloc task space */                                                                          \
     printf("Slave %s received exit pipeline, exiting...\n", STRING(vSlaveFunction_##test_name));            \
     xTaskNotifyGive(masterTaskHandle_##test_name);                                                          \
     /* TODO: Find better way to finish, the one which dealloc task struct. */                               \
@@ -481,7 +482,7 @@ bool check_result = false;                                                      
 for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
     ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
 }                                                                                                   \
-/* TODO: decide a bit how to do the check. */                                                       \
+vTaskDelay(pdMS_TO_TICKS(2));  /* Small delay for memory consistency */                             \
 CHECK_GENERATION(check_function, return_info_slaves)                                                \
 if(check_result){                                                                                   \
     output = return_info_slaves[0].return_value;                                                    \
