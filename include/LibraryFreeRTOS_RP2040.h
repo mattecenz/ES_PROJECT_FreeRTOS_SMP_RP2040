@@ -347,8 +347,6 @@ xTaskCreate(vMasterFunction_##test_name,    \
     RP2040config_tskMASTER_PRIORITY,        \
     &masterTaskHandle_##test_name);         \
 
-#define barrier() __dsb(); __isb();
-#define EXIT_PIPELINE 0x80 // Special value used to exit the pipeline and stop the slave tasks.
 #define MASTER_SLAVE_QUEUE_LENGTH RP2040config_testRUN_ON_CORES
 #define create_test_pipeline(test_name, MasterSetup, MasterLoop, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
@@ -364,6 +362,8 @@ struct return_info_##test_name{                                                 
 };                                                                                                          \
 /* This variable is used to control the execution of the MasterTask. */                                     \
 static bool should_continue##test_name=true;                                                                \
+/* This variable is used to control the execution of the SlaveTask. */                                      \
+static bool slave_operative##test_name=true;                                                                \
 static struct return_info_##test_name return_info_slaves[RP2040config_testRUN_ON_CORES];                    \
 static TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                   \
 /* Create the function executed by the slave. */                                                            \
@@ -376,13 +376,12 @@ static void vSlaveFunction_##test_name(){                                       
     while(true){                                                                                            \
         /* Wait that the master pushes something*/                                                          \
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);                                                            \
-        /* Wait for the master to send the input. */                                                        \
-        xQueueReceive(masterSendSlaveQueue_##test_name, &input, portMAX_DELAY);                             \
-        /* If the input is EXIT_PIPELINE value, then we stop the task. */                                   \
-        if(input == (void *)EXIT_PIPELINE){                                                                 \
+        if(!slave_operative##test_name){                                                                     \
             /* If the input is the exit pipeline, then we stop the task. */                                 \
             break;                                                                                          \
         }                                                                                                   \
+        /* Wait for the master to send the input. */                                                        \
+        xQueueReceive(masterSendSlaveQueue_##test_name, &input, portMAX_DELAY);                             \
         /* Save the time. */                                                                                \
         save_time_now();                                                                                    \
         /* Set the values in the shared struct */                                                           \
@@ -443,24 +442,17 @@ static void vMasterFunction_##test_name() {                                     
     }                                                                                                       \
     /* Notify slaves to finish. */                                                                          \
     printf("Master %s received exit command, exiting...\n", STRING(vMasterFunction_##test_name));           \
-    uint32_t exit_pipeline = EXIT_PIPELINE;                                                                 \
-    int forced_slaves = 0; /* Count of slaves which are forcefully deleted */                               \
     /* Notify the slaves to exit the pipeline. */                                                           \
+    slave_operative##test_name=false;                                                                       \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
-        if(xQueueSend(masterSendSlaveQueue_##test_name, (void*)&exit_pipeline, 0) != pdPASS){               \
-            printf("Error notifying the slave. Proceeding with forced deletion...\n");                      \
-            /* Forced deletion from master task */                                                          \
-            if(vSlaveFunctionHandles[i] != NULL){                                                           \
-                vTaskDelete(vSlaveFunctionHandles[i]);                                                      \
-            }                                                                                               \
-            forced_slaves++;                                                                                \
-        }                                                                                                   \
+        xTaskNotifyGive(vSlaveFunctionHandles[i]);                                                          \
     }                                                                                                       \
     /* Wait for the slaves to finish. */                                                                    \
-    for(int i=0;i<(RP2040config_testRUN_ON_CORES-forced_slaves); ++i){                                      \
+    for(int i=0;i<(RP2040config_testRUN_ON_CORES); ++i){                                      \
         /* Wait for the slaves to finish. */                                                                \
         ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                           \
     }                                                                                                       \
+    /* Cleanup resources. */                                                                                \
     if(masterSendSlaveQueue_##test_name != NULL){                                                           \
         vQueueDelete(masterSendSlaveQueue_##test_name);                                                     \
         masterSendSlaveQueue_##test_name = NULL;                                                            \
@@ -475,6 +467,7 @@ for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                               
         printf("Error since the send queue from the master is full. \n");                                   \
     }                                                                                                       \
 }                                                                                                           \
+/* Notify all slave tasks to start processing. */                                                           \
 for(int j=0; j<RP2040config_testRUN_ON_CORES; ++j){                                                         \
     xTaskNotifyGive(vSlaveFunctionHandles[j]);                                                              \
 }                                                                                                           \
