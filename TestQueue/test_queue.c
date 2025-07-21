@@ -8,7 +8,7 @@
 #define TEMPERATURE_QUEUE_LENGTH 100
 #define TEMPERATURE_GENERATION_PERIOD 1000
 #define TEMPERATURE_READS 20 // Number of temperature readings to be generated before the test ends.
-#define MASTER_READS 3 // Number of temperature readings to be processed by the master before the test ends.
+#define MASTER_READS 5 // Number of temperature readings to be processed by the master before the test ends.
 #define MASTER_DELAY 500 // half of the period to popolate the temperature queue.
 
 // Define a shared queue and the relative lock between a generic task and the master.
@@ -52,7 +52,7 @@ static void vTaskMasterSetup(){
         // printf("Error during creation of master-slave queue\n");
         vTaskDelete(NULL);
     }
-    count = 0;
+    count = 1;
 }
 
 // This function will be launched at each iteration of the master.

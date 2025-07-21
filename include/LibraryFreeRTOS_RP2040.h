@@ -34,6 +34,8 @@ Authors:
 #include "pico/stdlib.h"
 #include "hardware/timer.h"
 #include "pico/multicore.h"
+#include "hardware/sync.h" 
+#include "pico/platform.h"      /* For ARM intrinsics */
 
 
 // ------------------------------------------------------------------------ //
@@ -345,6 +347,7 @@ xTaskCreate(vMasterFunction_##test_name,    \
     RP2040config_tskMASTER_PRIORITY,        \
     &masterTaskHandle_##test_name);         \
 
+#define barrier() __dsb(); __isb();
 #define EXIT_PIPELINE 0x80 // Special value used to exit the pipeline and stop the slave tasks.
 #define MASTER_SLAVE_QUEUE_LENGTH RP2040config_testRUN_ON_CORES
 #define create_test_pipeline(test_name, MasterSetup, MasterLoop, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
@@ -362,6 +365,7 @@ struct return_info_##test_name{                                                 
 /* This variable is used to control the execution of the MasterTask. */                                     \
 static bool should_continue##test_name=true;                                                                \
 static struct return_info_##test_name return_info_slaves[RP2040config_testRUN_ON_CORES];                    \
+static TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                   \
 /* Create the function executed by the slave. */                                                            \
 /* It is divided between setup and loop phases. */                                                          \
 static void vSlaveFunction_##test_name(){                                                                   \
@@ -371,7 +375,9 @@ static void vSlaveFunction_##test_name(){                                       
     SlaveSetup();                                                                                           \
     while(true){                                                                                            \
         /* Wait that the master pushes something*/                                                          \
-        while(xQueueReceive(masterSendSlaveQueue_##test_name, &input, portMAX_DELAY) != pdPASS);            \
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);                                                            \
+        /* Wait for the master to send the input. */                                                        \
+        xQueueReceive(masterSendSlaveQueue_##test_name, &input, portMAX_DELAY);                             \
         /* If the input is EXIT_PIPELINE value, then we stop the task. */                                   \
         if(input == (void *)EXIT_PIPELINE){                                                                 \
             /* If the input is the exit pipeline, then we stop the task. */                                 \
@@ -384,8 +390,6 @@ static void vSlaveFunction_##test_name(){                                       
         return_info_slaves[coreNum].return_value=SlaveLoop(input);                                          \
         /* Calculate the time and store it. */                                                              \
         return_info_slaves[coreNum].return_time=calc_time_diff();                                           \
-        /* TODO find a way to flush writes, couldn't find a better way*/                                    \
-        vTaskDelay(pdMS_TO_TICKS(100)); /* Delay to allow time to flush writes. */                          \
         /* Notify the master that the task has finished the iteration. */                                   \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
@@ -398,7 +402,6 @@ static void vSlaveFunction_##test_name(){                                       
                                                                                                             \
 static void vMasterFunction_##test_name() {                                                                 \
     /* Store the task handles of the slaves in order to assign them to a core. */                           \
-    TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                      \
     /* Store the data  by each slave. */                                                                    \
     /* Create the two queues. */                                                                            \
     masterSendSlaveQueue_##test_name = xQueueCreate(MASTER_SLAVE_QUEUE_LENGTH, sizeof(void*));              \
@@ -472,6 +475,9 @@ for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                               
         printf("Error since the send queue from the master is full. \n");                                   \
     }                                                                                                       \
 }                                                                                                           \
+for(int j=0; j<RP2040config_testRUN_ON_CORES; ++j){                                                         \
+    xTaskNotifyGive(vSlaveFunctionHandles[j]);                                                              \
+}                                                                                                           \
 
 //Function used to receive the output from the slaves:
 //output is returned value
@@ -482,7 +488,6 @@ bool check_result = false;                                                      
 for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
     ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
 }                                                                                                   \
-vTaskDelay(pdMS_TO_TICKS(2));  /* Small delay for memory consistency */                             \
 CHECK_GENERATION(check_function, return_info_slaves)                                                \
 if(check_result){                                                                                   \
     output = return_info_slaves[0].return_value;                                                    \
