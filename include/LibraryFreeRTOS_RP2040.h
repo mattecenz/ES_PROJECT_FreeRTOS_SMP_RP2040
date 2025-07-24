@@ -377,7 +377,7 @@ xTaskCreate(vMasterFunction_##test_name,    \
 
 #define create_test_pipeline(test_name, MasterSetup, MasterLoop, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
-/* Define the appropriate data structure for the return values to the master. */                            \
+/* Define the appropriate data structure for the communication between master and slave. */                 \
 /* It contains also the time taken to execute the iteration, calculated automatically. */                   \
 struct return_info_##test_name{                                                                             \
      void *input;                                                                                           \
@@ -391,48 +391,34 @@ static bool slave_operative##test_name=true;                                    
 static struct return_info_##test_name return_info_slaves[RP2040config_testRUN_ON_CORES];                    \
 static TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                                   \
 /* Create the function executed by the slave. */                                                            \
-/* It is divided between setup and loop phases. */                                                          \
+/* It is includes  setup and loop phases. */                                                                \
 static void vSlaveFunction_##test_name(){                                                                   \
-    /* Prepare the variable where the inputs will be stored. */                                             \
     void *input;                                                                                            \
     int coreNum = get_core_num(); /* Get the core number where the task is running. */                      \
     SlaveSetup();                                                                                           \
     while(true){                                                                                            \
-        /* Wait that the master pushes something*/                                                          \
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);                                                            \
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);  /* Wait that the master pushes something*/                \
         if(!slave_operative##test_name){                                                                    \
-            /* If the input is the exit pipeline, then we stop the task. */                                 \
-            break;                                                                                          \
+            break;    /* If the input is the exit pipeline, then we stop the task. */                       \
         }                                                                                                   \
-        /* Wait for the master to send the input. */                                                        \
         input = return_info_slaves[coreNum].input; /* Get the input pointer. */                             \
-        /* Save the time. */                                                                                \
-        save_time_now();                                                                                    \
-        /* Set the values in the shared struct */                                                           \
-        /* Perform the loop specified by the user. */                                                       \
-        return_info_slaves[coreNum].return_value=SlaveLoop(input);                                          \
-        /* Calculate the time and store it. */                                                              \
-        return_info_slaves[coreNum].return_time=calc_time_diff();                                           \
-        /* Notify the master that the task has finished the iteration. */                                   \
-        free(input) ; /* Free the input pointer. */                                                         \
+        save_time_now();   /* Save the time. */                                                             \
+        return_info_slaves[coreNum].return_value=SlaveLoop(input);  /* Perform the loop specified by the user. */\
+        return_info_slaves[coreNum].return_time=calc_time_diff();   /* Calculate the time and store it. */  \
+        free(input) ; /* Free the input pointer since it has been allocated below*/                         \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
     printf("Slave %s received exit pipeline, exiting...\n", STRING(vSlaveFunction_##test_name));            \
     xTaskNotifyGive(masterTaskHandle_##test_name);                                                          \
-    /* TODO: Find better way to finish, the one which dealloc task struct. */                               \
+    /* Cleanup resources. */                                                                                \
     vTaskDelete(NULL);                                                                                      \
 }                                                                                                           \
                                                                                                             \
                                                                                                             \
 static void vMasterFunction_##test_name() {                                                                 \
-    /* Store the task handles of the slaves in order to assign them to a core. */                           \
-    /* Store the data  by each slave. */                                                                    \
-    /* Call the setup from the user. */                                                                     \
     MasterSetup();                                                                                          \
-    /* Create the slave tasks and assign them each to a core. */                                            \
-    /* Suspend scheduler so to allow creating new tasks */                                                  \
-    vTaskSuspendAll();                                                                                      \
-    for(int i=0;i<RP2040config_testRUN_ON_CORES; i++){                                                      \
+    vTaskSuspendAll();    /* Suspend scheduler so to allow creating new tasks */                            \
+    for(int i=0;i<RP2040config_testRUN_ON_CORES; i++){      /* Create the slave tasks and assign them each to a core. */\
         xTaskCreate(vSlaveFunction_##test_name,                                                             \
             STRING(vSlaveFunction_##test_name)STRING(n),                                                    \
             RP2040config_tskSLAVE_STACK_SIZE,                                                               \
@@ -441,11 +427,8 @@ static void vMasterFunction_##test_name() {                                     
             &vSlaveFunctionHandles[i]);                                                                     \
         vTaskCoreAffinitySet(vSlaveFunctionHandles[i], (1 << i));                                           \
     }                                                                                                       \
-    /* Resume the scheduler so to allow the tasks to run. */                                                \
-    xTaskResumeAll();                                                                                       \
-    /* Loop of the master. */                                                                               \
+    xTaskResumeAll();    /* Resume the scheduler so to allow the tasks to run. */                           \
     while(should_continue##test_name){                                                                      \
-        /* Call the function by the user. */                                                                \
         MasterLoop();                                                                                       \
         for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
             printf(                                                                                         \
@@ -459,16 +442,13 @@ static void vMasterFunction_##test_name() {                                     
                 i, return_info_slaves[i].return_time);                                                      \
         }                                                                                                   \
     }                                                                                                       \
-    /* Notify slaves to finish. */                                                                          \
-    printf("Master %s received exit command, exiting...\n", STRING(vMasterFunction_##test_name));           \
     /* Notify the slaves to exit the pipeline. */                                                           \
+    printf("Master %s received exit command, exiting...\n", STRING(vMasterFunction_##test_name));           \
     slave_operative##test_name=false;                                                                       \
     for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                      \
         xTaskNotifyGive(vSlaveFunctionHandles[i]);                                                          \
     }                                                                                                       \
-    /* Wait for the slaves to finish. */                                                                    \
-    for(int i=0;i<(RP2040config_testRUN_ON_CORES); ++i){                                                    \
-        /* Wait for the slaves to finish. */                                                                \
+    for(int i=0;i<(RP2040config_testRUN_ON_CORES); ++i){  /* Wait for the slaves to finish. */              \
         ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                           \
     }                                                                                                       \
     /* Cleanup resources. */                                                                                \
@@ -478,27 +458,28 @@ static void vMasterFunction_##test_name() {                                     
 #define prepare_input_for_slaves(test_name, input_usr)                                                      \
 for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                                                           \
     void * input_ptr = malloc(sizeof(input_usr));                                                           \
-    memcpy(input_ptr, &input_usr, sizeof(input_usr));                                                       \
-    /* Store the input pointer in the return_info_slaves struct. */                                         \
+    memcpy(input_ptr, &input_usr, sizeof(input_usr)); /* Duplicate variable to avoid concurrencies*/        \
     return_info_slaves[i].input = input_ptr;                                                                \
 }                                                                                                           \
-/* Notify all slave tasks to start processing. */                                                           \
 for(int j=0; j<RP2040config_testRUN_ON_CORES; ++j){                                                         \
     xTaskNotifyGive(vSlaveFunctionHandles[j]);                                                              \
 }                                                                                                           \
 
-//Function used to receive the output from the slaves:
-//output is returned value
-//outcome is true if the check was successful, false otherwise.
+/** Function used to receive the output from the slaves:
+
+    test_name:      the name of the test.
+    check_function: used to check the results of the slaves.
+    output:         returned value
+    outcome:        true if the check was successful, false otherwise.
+*/
 #define receive_output_from_slaves(test_name, check_function, output, outcome)                      \
 bool check_result = false;                                                                          \
-/* From now on he will wait for the tasks to finish. */                                             \
-for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                             \
+for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) { /* Wait for the tasks to finish. */         \
     ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                       \
 }                                                                                                   \
-CHECK_GENERATION(check_function, return_info_slaves)                                                \
+CHECK_GENERATION(check_function, return_info_slaves)  /* Check on returned values*/                 \
 if(check_result){                                                                                   \
-    output = return_info_slaves[0].return_value;                                                    \
+    output = return_info_slaves[0].return_value; /* If successful, return the first value */        \
     outcome = true;                                                                                 \
 } else {                                                                                            \
     output = 0;                                                                                     \
@@ -506,7 +487,7 @@ if(check_result){                                                               
 }                                                                                                   \
 
 #define exit_test_pipeline(test_name)                                                               \
-should_continue##test_name=false;                                                                   \
+should_continue##test_name=false; /* Set the master to exit*/                                       \
 
 
 #endif
