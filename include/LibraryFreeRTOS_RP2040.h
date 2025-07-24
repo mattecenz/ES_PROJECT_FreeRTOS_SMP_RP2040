@@ -36,7 +36,8 @@ Authors:
 #include "pico/multicore.h"
 #include "hardware/sync.h" 
 #include "pico/platform.h"      /* For ARM intrinsics */
-
+#include <stdlib.h>
+#include <string.h>
 
 // ------------------------------------------------------------------------ //
 //  UTILITIES MACROS                                                        //
@@ -257,7 +258,7 @@ static void vMasterFunction_##test_name() {                                     
 
     Arguments:
 
-        - test_name             : unique identifier of the test name
+        - test_name             : unique identifier of the test name.
         - return_type           : return value of the function.
         - conversion_char       : identifier to convert the result of the function in a string (e.g. int32_t -> "%d").
         - check_function        : name of the function used for error checking.
@@ -348,6 +349,34 @@ xTaskCreate(vMasterFunction_##test_name,    \
     &masterTaskHandle_##test_name);         \
 
 #define MASTER_SLAVE_QUEUE_LENGTH RP2040config_testRUN_ON_CORES
+
+/**
+    Macro which creates the testing pipeline for user-defined functions.
+
+    Arguments:
+
+        - test_name         : unique identifier of the test name.
+        - MasterSetup       : function called by the master task before starting the loop.
+        - MasterLoop        : function called by the master task at each iteration of the loop.
+        - SlaveSetup        : function called by the slave task before starting the loop.
+        - SlaveLoop         : function called by the slave task at each iteration of the loop.
+        - return_type       : return value of the slave execution.
+        - conversion_char   : identifier to convert the result of the function in a string (e.g. int32_t -> "%d"), used only for debugging.
+
+    It creates RP2040config_testRUN_ON_CORES + 1 tasks specified in this way:
+
+    RP2040config_testRUN_ON_CORES slave tasks, to be submitted one per core.
+    The slave tasks call the function specified in the input of the macro.
+
+    1 master task, which creates the two slaves, assigns and schedules them.
+    Then it will pause until both tasks are finished and it prints the result on the serial port.
+
+    For the moment it is assumed that the type returned by the task is a simple type.
+
+    At the end all the values produced by each core will be compared, expecting them to be all equal.
+
+ */
+
 #define create_test_pipeline(test_name, MasterSetup, MasterLoop, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
 /* Create two queues for communications master-slave. */                                                    \
@@ -390,6 +419,8 @@ static void vSlaveFunction_##test_name(){                                       
         /* Calculate the time and store it. */                                                              \
         return_info_slaves[coreNum].return_time=calc_time_diff();                                           \
         /* Notify the master that the task has finished the iteration. */                                   \
+        printf("FREE address: %p\n", input);                                                                \
+        free(input) ; /* Free the input pointer. */                                                         \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
     printf("Slave %s received exit pipeline, exiting...\n", STRING(vSlaveFunction_##test_name));            \
@@ -462,8 +493,11 @@ static void vMasterFunction_##test_name() {                                     
 
 #define prepare_input_for_slaves(test_name, input)                                                          \
 for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                                                           \
-    void* input_ptr = &input;                                                                               \
-    if(xQueueSend(masterSendSlaveQueue_##test_name, &input_ptr, 0)!=pdPASS){                                \
+    void * pointer = malloc(sizeof(input));                                                                 \
+    memcpy(pointer, &input, sizeof(input));                                                                 \
+    printf("Pointer address: %p\n", pointer);                                                               \
+    void* input_ptr = &pointer;                                                                             \
+    if(xQueueSend(masterSendSlaveQueue_##test_name, input_ptr, 0)!=pdPASS){                                 \
         printf("Error since the send queue from the master is full. \n");                                   \
     }                                                                                                       \
 }                                                                                                           \
