@@ -77,7 +77,7 @@ To compile the project we can do:
 ```bash
 $ mkdir build
 $ cd build
-$ cmake .. DPICO_BOARD=pico_w
+$ cmake .. DPICO_BOARD=arduino_nano_rp2040_connect
 $ make
 ```
 
@@ -103,8 +103,8 @@ The real library is implemented in [LibraryFreeRTOS_RP2040.h](./include/LibraryF
 
 The library is very simple to use.In your `main.c` file you can create your function and then call the library by using two primitives:
 
-* `create_test_pipeline_function()`: to be called outside of your main function. It is responsible for setting up the tasks which will run the test on both cores.
-* `start_test_pipeline()`: called in the main function. It is resposible for creating the master task which will orchestrate the execution of the two slaves.
+* `create_multicore_task_validator()`: to be called outside of your main function. It is responsible for setting up the tasks which will run the test on both cores.
+* `start_master()`: called in the main function. It is resposible for creating the master task which will orchestrate the execution of the two slaves.
 
 ```c
 #include "LibraryFreeRTOS_RP2040.h"
@@ -113,14 +113,14 @@ uint32_t addition(uint32_t num1, uint32_t num2){
     return num1+num2;
 }
 
-create_test_pipeline_function(test_add, uint32_t, "%ld", addition, 10, 5);
+create_multicore_task_validator(test_add, uint32_t, "%ld", addition, 10, 5);
 
 int main(){
 
     // Setup the SDK and the relative IO.
     start_hw();
 
-    start_test_pipeline(test_add);
+    start_master(test_add);
 
     // Launch the scheduler.
     start_FreeRTOS();

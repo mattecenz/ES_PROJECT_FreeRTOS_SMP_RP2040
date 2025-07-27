@@ -62,7 +62,7 @@ static void shared_subtraction_sdk_lock(){
 
 #pragma GCC pop_options
 
-create_test_pipeline_void_functions(test_nolock, 
+create_multicore_void_function_validator(test_nolock, 
     type_t, 
     "%ld", 
     DEFAULT_CHECK, 
@@ -71,7 +71,7 @@ create_test_pipeline_void_functions(test_nolock,
     shared_addition_nolock, 
     shared_subtraction_nolock)
 
-create_test_pipeline_void_functions(test_freertos_lock, 
+create_multicore_void_function_validator(test_freertos_lock, 
     type_t, 
     "%ld", 
     DEFAULT_CHECK,
@@ -80,7 +80,7 @@ create_test_pipeline_void_functions(test_freertos_lock,
     shared_addition_freertos_lock, 
     shared_subtraction_freertos_lock)
 
-create_test_pipeline_void_functions(test_sdk_lock, 
+create_multicore_void_function_validator(test_sdk_lock, 
     type_t, 
     "%ld", 
     DEFAULT_CHECK,
@@ -100,9 +100,9 @@ int main(void) {
     }
     xSemaphoreGive(bin_sem);
 
-    start_test_pipeline(test_nolock);
-    start_test_pipeline(test_freertos_lock);
-    start_test_pipeline(test_sdk_lock);
+    start_master(test_nolock);
+    start_master(test_freertos_lock);
+    start_master(test_sdk_lock);
 
     start_FreeRTOS();
 }
