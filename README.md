@@ -77,7 +77,7 @@ To compile the project we can do:
 ```bash
 $ mkdir build
 $ cd build
-$ cmake .. DPICO_BOARD=pico_w
+$ cmake .. DPICO_BOARD=arduino_nano_rp2040_connect
 $ make
 ```
 

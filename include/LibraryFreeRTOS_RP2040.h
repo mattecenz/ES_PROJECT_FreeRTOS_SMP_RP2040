@@ -95,8 +95,8 @@ absolute_time_diff_us(saved_time,get_absolute_time())   \
 
     It simply returns the negated XOR of the two return values (so if they are the same).
 */
-#define DEFAULT_CHECK(return_val_0, return_val_1)       \ 
-    !(return_val_0 ^ return_val_1)  \
+#define DEFAULT_CHECK(return_val_0, return_val_1)                                                        \
+    !(return_val_0 ^ return_val_1)                                                                       \
 
 // ------------------------------------------------------------------------ //
 //  PUBLIC INTERFACE                                                        //
@@ -360,7 +360,7 @@ static void vMasterFunction_##test_name() {                                     
     xTaskResumeAll();    /* Resume the scheduler so to allow the tasks to run. */                           \
     while(should_continue##test_name){                                                                      \
         MasterLoop();                                                                                       \
-        for(int i=0); i<RP2040config_testRUN_ON_CORES; ++i){                                                \
+        for(int i=0; i<RP2040config_testRUN_ON_CORES; ++i){                                                \
             if(return_info_slaves[i].input != NULL){                                                        \
                 free(return_info_slaves[i].input); /* Free the input pointer */                             \
                 return_info_slaves[i].input = NULL; /* Set the input pointer to NULL to avoid double free. */ \
