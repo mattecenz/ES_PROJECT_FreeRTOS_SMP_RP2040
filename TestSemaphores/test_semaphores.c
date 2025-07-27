@@ -54,7 +54,7 @@ static void shared_subtraction(){
 
 #pragma GCC pop_options
 
-create_test_pipeline_void_functions(test_ts, 
+create_multicore_void_function_validator(test_ts, 
     type_t, 
     "%ld", 
     DEFAULT_CHECK, 
@@ -76,7 +76,7 @@ int main(void) {
     xSemaphoreGive(bin_sem);
     #endif
 
-    start_test_pipeline(test_ts);
+    start_master(test_ts);
 
     start_FreeRTOS();
 }

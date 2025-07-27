@@ -66,54 +66,6 @@ absolute_time_t saved_time = get_absolute_time()        \
 #define calc_time_diff()                                \
 absolute_time_diff_us(saved_time,get_absolute_time())   \
 
-/*
-    (NOT USED)
-
-    Macro used to create the function associated to the master task.
-
-    Arguments:
-        - test_name         : unique identifier of the test name
-        - conversion_char   : identifier to convert the result of the function in a string.
-        - return_variable   : name of the variable where the results of the test are stored
-        - check_function    : function used to check the results of the two cores.
-
-    The master is designated to create the tasks to be launched on each core,
-    and it waits for their completion to collect and print their results.
-*/
-
-#define create_master_function(test_name, conversion_char, return_variable, check_function)             \
-static void vMasterFunction_##test_name() {                                                             \
-    bool check_result = false;                                                                          \
-    while(!check_result){                                                                               \
-        TaskHandle_t vSlaveFunctionHandles[RP2040config_testRUN_ON_CORES];                              \
-        for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                              \
-            xTaskCreate(vSlaveFunction_##test_name,                                                     \
-                STRING(vSlaveFunction_##test_name)STRING(n),                                            \
-                RP2040config_tskSLAVE_STACK_SIZE,                                                       \
-                &return_variable[i],                                                                    \
-                RP2040config_tskSLAVE_PRIORITY,                                                         \
-                &vSlaveFunctionHandles[i]);                                                             \
-            vTaskCoreAffinitySet(vSlaveFunctionHandles[i], (1 << i));                                   \
-        }                                                                                               \
-        for (int i = 0; i<RP2040config_testRUN_ON_CORES; i++) {                                         \
-            ulTaskNotifyTake(pdFALSE, portMAX_DELAY);                                                   \
-        }                                                                                               \
-        CHECK_GENERATION(check_function, return_variable)                                               \
-        if(!check_result){                                                                              \
-            printf(STRING(test_name)"> check_result: NOT_EQUALS\n");                                    \
-        }                                                                                               \
-    }                                                                                                   \
-    printf(STRING(test_name)" has ended correctly!\n");                                                 \
-    for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
-        printf(                                                                                         \
-            STRING(test_name)"> return_core_%d:\t" conversion_char"\n",                                 \
-            i,  return_variable[i].return_value);                                                       \
-        printf(                                                                                         \
-            STRING(test_name)"> return_time_%d:\t %llu \n",                                             \
-            i,  return_variable[i].return_time);                                                        \
-    }                                                                                                   \
-    vTaskDelete(NULL);                                                                                  \
-}                                                                                                       \
 
 /*
     Macro used to check the results of the cores.
@@ -143,8 +95,7 @@ static void vMasterFunction_##test_name() {                                     
 
     It simply returns the negated XOR of the two return values (so if they are the same).
 */
-
-#define DEFAULT_CHECK(return_val_0, return_val_1)       \
+#define DEFAULT_CHECK(return_val_0, return_val_1)       \ 
     !(return_val_0 ^ return_val_1)  \
 
 // ------------------------------------------------------------------------ //
@@ -203,7 +154,7 @@ void start_FreeRTOS(){
 
  */
 
-#define create_test_pipeline_function(test_name, return_type, conversion_char, function_name, check_function, ...)          \
+#define create_multicore_function_validator(test_name, return_type, conversion_char, function_name, check_function, ...)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
                                                                                                             \
 struct return_info_##test_name{                                                                             \
@@ -276,7 +227,7 @@ static void vMasterFunction_##test_name() {                                     
     At the end the value in return_name will be compared with the value contained in expected_value, using the check_function.
  */
 
-#define create_test_pipeline_void_functions(test_name, return_type, conversion_char, check_function, expected_value, return_name, ...)     \
+#define create_multicore_void_function_validator(test_name, return_type, conversion_char, check_function, expected_value, return_name, ...)     \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
                                                                                                             \
 struct return_info_##test_name{                                                                             \
@@ -329,26 +280,6 @@ static void vMasterFunction_##test_name() {                                     
 }                                                                                                           \
 
 /**
-    Method which creates the master task assigned to a specific test name.
-
-    The master task launches the master function.
-
-    By default it has minimal stack size, no input parameters, and a priority equal to the
-    one of the slave tasks + 1.
-
-    Moreover it saves the return handle in a shared variable, used for notifying that the slaves 
-    have terminated their execution.
-*/
-
-#define start_test_pipeline(test_name)      \
-xTaskCreate(vMasterFunction_##test_name,    \
-    "vMasterFunction"STRING(test_name),     \
-    RP2040config_tskMASTER_STACK_SIZE,      \
-    NULL,                                   \
-    RP2040config_tskMASTER_PRIORITY,        \
-    &masterTaskHandle_##test_name);         \
-
-/**
     Macro which creates the testing pipeline for user-defined functions.
 
     Arguments:
@@ -375,14 +306,14 @@ xTaskCreate(vMasterFunction_##test_name,    \
 
  */
 
-#define create_test_pipeline(test_name, MasterSetup, MasterLoop, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
+#define create_multicore_task_validator(test_name, MasterSetup, MasterLoop, SlaveSetup, SlaveLoop, return_type, conversion_char)          \
 static TaskHandle_t masterTaskHandle_##test_name = NULL;                                                    \
 /* Define the appropriate data structure for the communication between master and slave. */                 \
 /* It contains also the time taken to execute the iteration, calculated automatically. */                   \
 struct return_info_##test_name{                                                                             \
-     void *input;                                                                                           \
-      return_type return_value;                                                                             \
-     uint64_t return_time;                                                                                  \
+    void *input;                                                                                            \
+    return_type return_value;                                                                               \
+    uint64_t return_time;                                                                                   \
 };                                                                                                          \
 /* This variable is used to control the execution of the MasterTask. */                                     \
 static bool should_continue##test_name=true;                                                                \
@@ -405,7 +336,6 @@ static void vSlaveFunction_##test_name(){                                       
         save_time_now();   /* Save the time. */                                                             \
         return_info_slaves[coreNum].return_value=SlaveLoop(input);  /* Perform the loop specified by the user. */\
         return_info_slaves[coreNum].return_time=calc_time_diff();   /* Calculate the time and store it. */  \
-        free(input) ; /* Free the input pointer since it has been allocated below*/                         \
         xTaskNotifyGive(masterTaskHandle_##test_name);                                                      \
     }                                                                                                       \
     printf("Slave %s received exit pipeline, exiting...\n", STRING(vSlaveFunction_##test_name));            \
@@ -430,7 +360,13 @@ static void vMasterFunction_##test_name() {                                     
     xTaskResumeAll();    /* Resume the scheduler so to allow the tasks to run. */                           \
     while(should_continue##test_name){                                                                      \
         MasterLoop();                                                                                       \
-        for(int i=0;i<RP2040config_testRUN_ON_CORES; ++i){                                                  \
+        for(int i=0); i<RP2040config_testRUN_ON_CORES; ++i){                                                \
+            if(return_info_slaves[i].input != NULL){                                                        \
+                free(return_info_slaves[i].input); /* Free the input pointer */                             \
+                return_info_slaves[i].input = NULL; /* Set the input pointer to NULL to avoid double free. */ \
+            }                                                                                               \
+        }                                                                                                   \
+        for(int i=0;i<RP2040config_testRUN_ON_CORES && should_continue##test_name; ++i){                    \
             printf(                                                                                         \
                 STRING(test_name)"> return_core_id__core:\t %d\n",                                          \
                 i);                                                                                         \
@@ -458,6 +394,11 @@ static void vMasterFunction_##test_name() {                                     
 #define prepare_input_for_slaves(test_name, input_usr)                                                      \
 for(int i=0;i<RP2040config_testRUN_ON_CORES;++i){                                                           \
     void * input_ptr = malloc(sizeof(input_usr));                                                           \
+    if(input_ptr == NULL){                                                                                  \
+        printf("Error allocating memory for input pointer in %s\n", STRING(test_name));                     \
+        exit_test_pipeline(test_name);                                                                      \
+        return;                                                                                             \
+    }                                                                                                       \
     memcpy(input_ptr, &input_usr, sizeof(input_usr)); /* Duplicate variable to avoid concurrencies*/        \
     return_info_slaves[i].input = input_ptr;                                                                \
 }                                                                                                           \
@@ -488,6 +429,28 @@ if(check_result){                                                               
 
 #define exit_test_pipeline(test_name)                                                               \
 should_continue##test_name=false; /* Set the master to exit*/                                       \
+
+
+/**
+    Method which creates the master task assigned to a specific test name.
+
+    The master task launches the master function.
+
+    By default it has minimal stack size, no input parameters, and a priority equal to the
+    one of the slave tasks + 1.
+
+    Moreover it saves the return handle in a shared variable, used for notifying that the slaves 
+    have terminated their execution.
+*/
+
+#define start_master(test_name)      \
+xTaskCreate(vMasterFunction_##test_name,    \
+    "vMasterFunction"STRING(test_name),     \
+    RP2040config_tskMASTER_STACK_SIZE,      \
+    NULL,                                   \
+    RP2040config_tskMASTER_PRIORITY,        \
+    &masterTaskHandle_##test_name);         \
+
 
 
 #endif

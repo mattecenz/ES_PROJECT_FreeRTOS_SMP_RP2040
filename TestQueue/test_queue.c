@@ -30,13 +30,13 @@ static void vTaskTemperatureGenerator(){
     }
     vTaskDelete(NULL); // Delete the task when done.
 }
-
+//TODO: check if can remove prototypes
 static void vTaskMasterSetup();
 static void vTaskMasterLoop();
 static void vTaskSlaveSetup();
 static uint32_t vTaskSlaveLoop(void* param);
 
-create_test_pipeline(
+create_multicore_task_validator(
     test_temperature, // name of the test
     vTaskMasterSetup,
     vTaskMasterLoop,
@@ -114,7 +114,7 @@ int main(void) {
     }
 
     // Prototype of library call.
-    start_test_pipeline(test_temperature);
+    start_master(test_temperature);
 
     // Here we create the taks for the temperature generator.
     xTaskCreate(vTaskTemperatureGenerator,    

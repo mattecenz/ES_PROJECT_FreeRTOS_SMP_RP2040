@@ -29,7 +29,7 @@ static bool check_equals(type_t return_core_0, type_t return_core_1) {
 
 #pragma GCC pop_options
 
-create_test_pipeline_function(test_addition, 
+create_multicore_function_validator(test_addition, 
     type_t, 
     "%ld", 
     addition,
@@ -37,7 +37,7 @@ create_test_pipeline_function(test_addition,
     10,
     3)
 
-create_test_pipeline_function(test_subtraction, 
+create_multicore_function_validator(test_subtraction, 
     type_t, 
     "%ld", 
     subtraction,
@@ -45,7 +45,7 @@ create_test_pipeline_function(test_subtraction,
     10,
     3)
 
-create_test_pipeline_function(test_multiplication, 
+create_multicore_function_validator(test_multiplication, 
     type_t, 
     "%ld", 
     multiplication,
@@ -53,7 +53,7 @@ create_test_pipeline_function(test_multiplication,
     10,
     3)
 
-create_test_pipeline_function(test_division, 
+create_multicore_function_validator(test_division, 
     type_t, 
     "%ld", 
     division,
@@ -65,10 +65,10 @@ int main(void) {
 
     start_hw();
 
-    start_test_pipeline(test_addition);
-    start_test_pipeline(test_subtraction);
-    start_test_pipeline(test_multiplication);
-    start_test_pipeline(test_division);
+    start_master(test_addition);
+    start_master(test_subtraction);
+    start_master(test_multiplication);
+    start_master(test_division);
 
 
     start_FreeRTOS();
