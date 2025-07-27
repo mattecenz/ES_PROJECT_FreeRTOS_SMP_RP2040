@@ -93,7 +93,6 @@ static void vTaskSlaveSetup(){
 // The value will be rewritten into the shared queue.
 static uint32_t vTaskSlaveLoop(void* param){                                                                                 
     int32_t temp_read = *((int32_t*) param);
-    printf("Slave received temperature from addr:%p\n", param);
     // Return the temperature in Celsius in the master-slave queue.
     temp_read=temp_read-273; // add some noise to the temperature reading
 
